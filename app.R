@@ -2,11 +2,19 @@
 # Projet de fin de semestre
 # Robinson Maury et César Wapler
 
-packages <- c("shiny", "tidyverse", "plotly", "leaflet")
-for (package in packages) {
-  if (!require(package)) install.packages(package)
-  library(package)
+packages <- c("shiny", 
+              "tidyverse", 
+              "plotly", 
+              "leaflet", 
+              "maps",
+              "sf",
+              "stringr")
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
 }
+invisible(lapply(packages, library, character.only = TRUE))
+remove(packages, installed_packages)
 
 # library(sf) # cartographie
 # library(DT)
@@ -289,3 +297,50 @@ shinyApp(ui = ui, server = server)
 
 
 # LEAFLETTTTT
+
+download.file(
+  "https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/download/?format=shp&timezone=Europe/Paris&lang=en",
+  "data/geo_world.shp.zip"
+)
+unzip("data/geo_world.shp.zip", exdir="data")
+geo_world <- read_sf("data/world-administrative-boundaries.shp")
+
+geo_europe <- geo_world %>% 
+  filter(grepl(".*europe.*", continent, ignore.case=T))
+
+
+
+
+palette <- colorNumeric(palette = "Reds", domain = alcohol_mean_geo$mean_deaths, reverse = FALSE)
+# palette <- colorNumeric(c("red", "green", "blue"), 0:100)
+
+leaflet(alcohol_mean_geo) %>% 
+  addProviderTiles(providers$CartoDB.DarkMatterNoLabels) %>%
+  # addTiles() %>%
+  addPolygons(fillColor = ~palette(mean_deaths),
+              label = paste0(alcohol_mean_geo$french_shor, " : ", alcohol_mean_geo$mean_deaths, " morts/an"),
+              stroke = FALSE, smoothFactor = 0.3, fillOpacity = 1) %>%
+  # addTopoJSON(geo_europe, weight = 1, color = "#444444", fill = TRUE) %>% 
+  setView(lng = 16, lat = 53, zoom = 3) %>% 
+  addLabelOnlyMarkers(label = if_else(grepl("Royaume-Uni", alcohol_mean_geo$french_shor), "Royaume-Uni", alcohol_mean_geo$french_shor), 
+                      data = alcohol_mean_geo$centroid,
+                      labelOptions = labelOptions(noHide = T, direction = "center", textOnly = TRUE,
+                                                  style = list(
+                                                    "color" = "white",
+                                                    "font-family" = "sans-serif",
+                                                    "font-weight" = "normal",
+                                                    "font-size" = "0.5rem",
+                                                    "text-shadow" = "1px  0px 2px black,
+                                                                    -1px  0px 2px black,
+                                                                     0px  1px 2px black,
+                                                                     0px -1px 2px black")))
+
+
+#  FROM https://rstudio.github.io/leaflet/json.html
+# leaflet(nycounties) %>%
+#   addTiles() %>%
+#   addPolygons(stroke = FALSE, smoothFactor = 0.3, fillOpacity = 1,
+#               fillColor = ~pal(log10(pop)),
+#               label = ~paste0(county, ": ", formatC(pop, big.mark = ","))) %>%
+#   addLegend(pal = pal, values = ~log10(pop), opacity = 1.0,
+#             labFormat = labelFormat(transform = function(x) round(10^x)))
