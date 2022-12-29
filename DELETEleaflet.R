@@ -25,30 +25,16 @@ geo_world <- read_sf("data/world-administrative-boundaries.shp")
 geo_europe <- geo_world %>% 
   filter(grepl(".*europe.*", continent, ignore.case=T))
 
-
-
-
- 
+palette <- colorNumeric(palette = "viridis", domain = NULL, reverse = FALSE)
 
 leaflet(geo_europe) %>% 
   # addProviderTiles(providers$Stamen.Toner) %>% 
-  addPolygons(fillColor = topo.colors(10, alpha = NULL), stroke = FALSE)
-  # addTopoJSON(geo, weight = 1, color = "#444444", fill = TRUE)
-  # setView(lng = -98.583, lat = 39.833, zoom = 3) %>% 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  addTiles() %>% 
+  # addPolygons(fillColor = topo.colors(10, alpha = NULL), stroke = FALSE) %>%  
+  addPolygons(fillColor = ~palette(), 
+              stroke = FALSE) %>%  
+  # addTopoJSON(geo_europe, weight = 1, color = "#444444", fill = TRUE) %>% 
+  setView(lng = 16, lat = 53, zoom = 3)
 
 # POUBELLE -----
 
