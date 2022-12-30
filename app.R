@@ -23,137 +23,109 @@ remove(packages, installed_packages)
 # library(shinydashboard)
 
 # Téléchargement des données non présentes dans `data/` ----
-download_rename_csv <- function(url, name = "data", dir = ".", sep = ",", skip = 0) {
+download_rename_file <- function(url, filename, dir = ".") {
   # Fonction qui télécharge un CSV depuis l'url en nommant le fichier avec la
-  # date, et ouvre le fichier en le passant en valeur de retour.
+  # date, et renvoie le nom du fichier à ouvrir.
   
-
+  name <- sub("\\..*", "", filename)
+  ext  <- sub(".*?\\.", ".", filename)
+  
   search <- grepl(pattern = paste0(name, ".*"),
                   x = list.files(path=dir))
   
   if (!any(search)) {
-    cat("Creating directory ", file.path(dir, ""), " if it does not exist...\n", sep = "")
+    cat("Creating directory", file.path(dir, ""), "if it does not exist...\n")
     dir.create(dir, showWarnings = FALSE)
     
-    filename <- paste0(name, "_", Sys.Date(), "_", format(Sys.time(), "%H-%M"),".csv")
+    filename <- paste0(name, "_", Sys.Date(), "_", format(Sys.time(), "%H-%M"), ext)
     filepath <- file.path(dir, filename)
     
-    cat("Downloading file from URL to ", filepath, "...\n")
+    cat("Downloading file from URL to", filepath, "...\n")
     download.file(url, filepath)
     
-    cat("Reading file...\n")
+    if (any(grepl("\\.zip", ext))) {
+      cat("Unzipped contents of", filename, "to", file.path(dir, ""))
+      unzip(filepath, exdir="data")
+    }
     
-    return(read_delim(filepath, delim = sep, skip = skip))
-    
+    return(filepath)
   } else {
-    existing_file <- list.files(path = dir, full.names = TRUE)[which(search == TRUE)][1]
-    cat("File exists:", existing_file, "\nReading file...\n")
-    
-    return(read_delim(existing_file, delim = sep, skip = skip))
+    existing_filepath <- list.files(path = dir, full.names = TRUE)[which(search == TRUE)][1]
+    cat("File exists:", existing_filepath)
+
+    return(existing_filepath)
   }
 }
 
 # CSV avec les données principales sur la mortalité par intoxication alcoolique
-alcohol <- download_rename_csv(
-  url  = "https://dw.euro.who.int/api/v3/export/download/03e871525401419398cc389280fc6654",
-  name = "alcohol_deaths", # Le nom du fichier qui sera enregistré dans `/data`
-  dir  = "data",           # Le nom de notre dossier de données
-  skip = 28                # Sauter les 28 lignes d'information au début du csv
-) %>% 
+alcohol_csv_path <- download_rename_file(
+  url = "https://dw.euro.who.int/api/v3/export/download/03e871525401419398cc389280fc6654",
+  filename = "alcohol.csv", 
+  dir = "data")
+
+alcohol <- read_delim(alcohol_csv_path, delim = ",", skip = 28) %>% 
   head(-7) %>% # `head()` pour retirer les lignes de copyright à la fin
   select(country_code = COUNTRY, # On select et renomme les colonnes en même temps
          sex          = SEX,
          year         = YEAR,
          deaths       = VALUE) %>% 
-  mutate(sex = tolower(sex))
+  mutate(sex = tolower(sex)) %>% 
+  pivot_wider(names_from = sex, names_prefix = "deaths_", values_from = deaths)
 
-# CSV avec les noms de pays + codes
-countries <- download_rename_csv(
-  url  = "https://raw.githubusercontent.com/lukes/ISO-3166-Countries-with-Regional-Codes/master/all/all.csv",
-  name = "countries",
-  dir  = "data"
-) %>% 
-  select(
-    country_name   = name,
-    country_code   = `alpha-3`,
-    country_region = region) %>%
-  mutate( # `mutate()` pour renommer le Royaume-Uni avec un nom plus court
-    country_name = ifelse(
-      country_name == "United Kingdom of Great Britain and Northern Ireland", 
-      "United Kingdom", 
-      country_name)
-  ) 
+alcohol_avg <- alcohol %>% 
+  group_by(country_code) %>%
+  mutate(deaths_female = round(mean(deaths_female, na.rm = T)),
+         deaths_male   = round(mean(deaths_male, na.rm = T)),
+         deaths_all    = round(mean(deaths_all, na.rm = T))) %>%
+  mutate(data_range = paste0(min(year), "-", max(year))) %>% 
+  ungroup() %>%
+  select(-year) %>% 
+  unique()
 
-# CSV avec les noms de pays en français
-countries_fr <- download_rename_csv(
-  url  = "https://raw.githubusercontent.com/stefangabos/world_countries/master/data/countries/fr/countries.csv",
-  name = "fr_countries",
-  dir  = "data"
-) %>% 
-  select(
-    country_name_fr = name, 
-    country_code    = alpha3) %>% 
-  mutate(country_code = toupper(country_code))
 
-# On join pour avoir un df avec les codes + les noms FR
-countries <- right_join(countries, countries_fr)
-
-# On filtre pour ne garder que les pays d'Europe
-countries_europe <- countries %>% 
-  filter(country_region == "Europe")
-
-# Ajout des noms et codes de pays au df principal
-alcohol <- right_join(countries, alcohol)
-
-# Données pour leaflet ----
+# Données pour leaflet ---- ET DONNEES PAYS + NOMS, NOMS EN FR ...
 # Téléchargement et dézippage du Shapefile (si un zipfile n'existe pas déjà)
-if (!any(grepl("geo_world_.*\\.shp\\.zip", list.files(path="data")))) {
-  filepath <- file.path( # Chemin du fichier avec date dans le nom (eg. `geo_world_2022-12-25_00-00.shp.zip`)
-    "data", paste0("geo_world", "_", Sys.Date(), "_", format(Sys.time(), "%H-%M"), ".shp.zip")
-    )
-  
-  cat("Downloading zip file to ", filepath, "...\n")
-  
-  download.file(
-    "https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/download/?format=shp&timezone=Europe/Paris&lang=en",
-    filepath
-  )
-  unzip(filepath, exdir="data")
-}
+download_rename_file(
+  url = "https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/download/?format=shp&timezone=Europe/Paris&lang=en", 
+  filename = "geo_world.shp.zip",  dir = "data")
 
 # Chargement du Shapefile
-geo_world <- read_sf(file.path("data", "world-administrative-boundaries.shp"))
+geo_world <- read_sf(file.path("data", "world-administrative-boundaries.shp")) %>% 
+  select(country_code = iso3,
+         continent,
+         country_name_fr = french_shor,
+         geometry) %>% 
+  mutate(geometry_centroid = st_centroid(geometry),
+         country_name_fr = if_else(grepl("Royaume-Uni", country_name_fr), "Royaume-Uni", country_name_fr))
 
-# `filter()` pour ne garder que les payrs européens
-geo_europe <- geo_world %>% 
-  filter(grepl(".*europe.*", continent, ignore.case = TRUE))
 
-# Certaines informations telles que le nom des pays, codes, et noms français sont
-# présents dans ce df, rendant l'import fait plus tôt (ligne ~70...) redondant.
-# À re-factoriser...
 
-# Assemblage du df pour leaflet ---- 
-
-# Il y a sans doute un moyen plus concis de faire ces transformations...
-alcohol_geo <- alcohol %>%
-  group_by(country_code, sex) %>%
-  mutate(total_avg = mean(deaths)) %>%
-  ungroup() %>%
-  pivot_longer(c(total_avg, year), names_to = "type", values_to = "year") %>%
-  mutate(
-    deaths = if_else(type == "total_avg", year, round(deaths)),
-    year = ifelse(type == "total_avg", NA, round(year)),
-  ) %>%
-  unique() %>%
-  mutate(deaths = round(deaths)) %>% 
-  pivot_wider(names_from = sex, names_prefix = "deaths_", values_from = deaths) %>% 
-  right_join(y = geo_europe, by = c("country_code" = "color_code")) %>% 
-  select(starts_with("country_"), type, year, starts_with("deaths_"), geometry) %>% 
+alcohol_geo <- right_join(geo_world, alcohol) %>% 
   st_as_sf() %>% 
-  mutate(geometry_center = st_centroid(geometry))
+  relocate(contains("geometry"), .after = last_col())
+
+alcohol_avg_geo <- right_join(geo_world, alcohol_avg) %>%  
+  st_as_sf() %>% 
+  relocate(contains("geometry"), .after = last_col())
 
 
 
+alcohol <- alcohol_geo %>% 
+  st_drop_geometry() %>% 
+  select(-contains("geometry"))
+  
+alcohol_avg <- alcohol_avg_geo %>% 
+  st_drop_geometry() %>% 
+  select(-contains("geometry"))
+
+
+# Cleanup
+remove(alcohol_csv_path, geo_world)
+
+# --------- STOPPED REFACTORING HERE -----------
+# --------- STOPPED REFACTORING HERE -----------
+# --------- STOPPED REFACTORING HERE -----------
+# --------- STOPPED REFACTORING HERE -----------
 
 # Functions to be called by shiny's server function ----
 
