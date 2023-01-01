@@ -1,0 +1,11 @@
+---
+title: "Projet PIR-S3 Langage de Traitement des Données"
+author: "R. Maury et C. Wapler"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Code

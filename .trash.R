@@ -176,3 +176,8 @@ if (FALSE) {
 #   select(starts_with("country_"), type, year, starts_with("deaths_"), geometry) %>% 
 #   st_as_sf() %>% 
 #   mutate(geometry_center = st_centroid(geometry))
+
+# ----
+# tags$li(a("L. Duncalfe", href="https://github.com/lukes/ISO-3166-Countries-with-Regional-Codes")),
+# tags$li(a("Wikipedia", href="https://en.wikipedia.org/wiki/ISO_3166-1#Officially_assigned_code_elements")),
+# tags$li(a("UN Statistics", href="https://unstats.un.org/unsd/methodology/m49/overview"))
