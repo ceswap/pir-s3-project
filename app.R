@@ -9,7 +9,8 @@ packages <- c("shiny",
               "leaflet", 
               "maps",
               "sf",
-              "stringr")
+              "stringr",
+              "htmltools")
 
 installed_packages <- packages %in% rownames(installed.packages())
 if (any(installed_packages == FALSE)) {
@@ -23,314 +24,495 @@ remove(packages, installed_packages)
 # library(shinydashboard)
 
 # Téléchargement des données non présentes dans `data/` ----
-download_rename_csv <- function(url, name = "data", dir = ".", sep = ",", skip = 0) {
+download_rename_file <- function(url, filename, dir = ".") {
   # Fonction qui télécharge un CSV depuis l'url en nommant le fichier avec la
-  # date, et ouvre le fichier en le passant en valeur de retour.
+  # date, et renvoie le nom du fichier à ouvrir.
   
-
+  name <- sub("\\..*", "", filename)
+  ext  <- sub(".*?\\.", ".", filename)
+  
   search <- grepl(pattern = paste0(name, ".*"),
                   x = list.files(path=dir))
   
   if (!any(search)) {
-    cat("Creating directory ", file.path(dir, ""), " if it does not exist...\n", sep = "")
+    cat("Creating directory", file.path(dir, ""), "if it does not exist...\n")
     dir.create(dir, showWarnings = FALSE)
     
-    filename <- paste0(name, "_", Sys.Date(), "_", format(Sys.time(), "%H-%M"),".csv")
+    filename <- paste0(name, "_", Sys.Date(), "_", format(Sys.time(), "%H-%M"), ext)
     filepath <- file.path(dir, filename)
     
-    cat("Downloading file from URL to ", filepath, "...\n")
+    cat("Downloading file from URL to", filepath, "...\n")
     download.file(url, filepath)
     
-    cat("Reading file...\n")
+    if (any(grepl("\\.zip", ext))) {
+      cat("Unzipped contents of", filename, "to", file.path(dir, ""), "\n")
+      unzip(filepath, exdir="data")
+    }
     
-    return(read_delim(filepath, delim = sep, skip = skip))
-    
+    return(filepath)
   } else {
-    existing_file <- list.files(path = dir, full.names = TRUE)[which(search == TRUE)][1]
-    cat("File exists:", existing_file, "\nReading file...\n")
-    
-    return(read_delim(existing_file, delim = sep, skip = skip))
+    existing_filepath <- list.files(path = dir, full.names = TRUE)[which(search == TRUE)][1]
+    cat("File exists:", existing_filepath, "\n")
+
+    return(existing_filepath)
   }
 }
 
 # CSV avec les données principales sur la mortalité par intoxication alcoolique
-alcohol <- download_rename_csv(
-  url  = "https://dw.euro.who.int/api/v3/export/download/03e871525401419398cc389280fc6654",
-  name = "alcohol_deaths", # Le nom du fichier qui sera enregistré dans `/data`
-  dir  = "data",           # Le nom de notre dossier de données
-  skip = 28                # Sauter les 28 lignes d'information au début du csv
-) %>% 
+alcohol_csv_path <- download_rename_file(
+  url = "https://dw.euro.who.int/api/v3/export/download/03e871525401419398cc389280fc6654",
+  filename = "alcohol.csv", 
+  dir = "data")
+
+alcohol <- read_delim(alcohol_csv_path, delim = ",", skip = 28) %>% 
   head(-7) %>% # `head()` pour retirer les lignes de copyright à la fin
   select(country_code = COUNTRY, # On select et renomme les colonnes en même temps
          sex          = SEX,
          year         = YEAR,
          deaths       = VALUE) %>% 
-  mutate(sex = tolower(sex))
+  mutate(sex = tolower(sex)) %>% 
+  pivot_wider(names_from = sex, names_prefix = "deaths_", values_from = deaths, names_sort = TRUE)
 
-# CSV avec les noms de pays + codes
-countries <- download_rename_csv(
-  url  = "https://raw.githubusercontent.com/lukes/ISO-3166-Countries-with-Regional-Codes/master/all/all.csv",
-  name = "countries",
-  dir  = "data"
-) %>% 
-  select(
-    country_name   = name,
-    country_code   = `alpha-3`,
-    country_region = region) %>%
-  mutate( # `mutate()` pour renommer le Royaume-Uni avec un nom plus court
-    country_name = ifelse(
-      country_name == "United Kingdom of Great Britain and Northern Ireland", 
-      "United Kingdom", 
-      country_name)
-  ) 
 
-# CSV avec les noms de pays en français
-countries_fr <- download_rename_csv(
-  url  = "https://raw.githubusercontent.com/stefangabos/world_countries/master/data/countries/fr/countries.csv",
-  name = "fr_countries",
-  dir  = "data"
-) %>% 
-  select(
-    country_name_fr = name, 
-    country_code    = alpha3) %>% 
-  mutate(country_code = toupper(country_code))
 
-# On join pour avoir un df avec les codes + les noms FR
-countries <- right_join(countries, countries_fr)
+download_rename_file(
+  url = "https://population.un.org/wpp/Download/Files/1_Indicators%20(Standard)/CSV_FILES/WPP2022_TotalPopulationBySex.zip",
+  filename = "population",
+  dir = "data") # SSL ERROR WHEN TRYING TO DOWNLOAD IT !!
 
-# On filtre pour ne garder que les pays d'Europe
-countries_europe <- countries %>% 
-  filter(country_region == "Europe")
+population <- read_delim(file.path("data", "WPP2022_TotalPopulationBySex.csv"), delim = ",") %>% 
+  filter(LocTypeName == "Country/Area") %>% 
+  select(country_code = ISO3_code,
+         year         = Time,
+         pop_all      = PopTotal, 
+         pop_female   = PopFemale,
+         pop_male     = PopMale) %>% 
+  mutate(across(starts_with("pop_"), ~ .x / 1000))
 
-# Ajout des noms et codes de pays au df principal
-alcohol <- right_join(countries, alcohol)
+alcohol <- alcohol %>% 
+  left_join(population) %>% 
+  mutate(deaths_all_million    = round(deaths_all / pop_all, 2),
+         deaths_female_million = round(deaths_female / pop_female, 2),
+         deaths_male_million   = round(deaths_male / pop_male, 2)) %>% 
+  select(-starts_with("pop_"))
+  
 
-# Données pour leaflet ----
+
+
+alcohol_stats <- alcohol %>% 
+  group_by(country_code) %>%
+  mutate(highest_year = year[which.max(deaths_all)],
+         max          = max(deaths_all),
+         start_year   = min(year),
+         end_year     = max(year),
+         deaths_all    = round(mean(deaths_all, na.rm = T)),
+         deaths_female = round(mean(deaths_female, na.rm = T)),
+         deaths_male   = round(mean(deaths_male, na.rm = T)),
+         max_million            = max(deaths_all_million),
+         deaths_all_million     = mean(deaths_all_million, na.rm = T),
+         deaths_female_million  = mean(deaths_female_million, na.rm = T),
+         deaths_male_million    = mean(deaths_male_million, na.rm = T),
+         across(ends_with("_million"), ~ round(.x, 2) )) %>% 
+  select(-starts_with("pop_"), -year) %>% 
+  ungroup() %>%
+  unique()
+
+# Données pour leaflet ---- ET DONNEES PAYS + NOMS, NOMS EN FR ...
 # Téléchargement et dézippage du Shapefile (si un zipfile n'existe pas déjà)
-if (!any(grepl("geo_world_.*\\.shp\\.zip", list.files(path="data")))) {
-  filepath <- file.path( # Chemin du fichier avec date dans le nom (eg. `geo_world_2022-12-25_00-00.shp.zip`)
-    "data", paste0("geo_world", "_", Sys.Date(), "_", format(Sys.time(), "%H-%M"), ".shp.zip")
-    )
-  
-  cat("Downloading zip file to ", filepath, "...\n")
-  
-  download.file(
-    "https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/download/?format=shp&timezone=Europe/Paris&lang=en",
-    filepath
-  )
-  unzip(filepath, exdir="data")
-}
+download_rename_file(
+  url = "https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/download/?format=shp&timezone=Europe/Paris&lang=en", 
+  filename = "geo_world.zip",  dir = "data")
 
 # Chargement du Shapefile
-geo_world <- read_sf(file.path("data", "world-administrative-boundaries.shp"))
+geo_world <- read_sf(file.path("data", "world-administrative-boundaries.shp")) %>% 
+  select(country_code = iso3,
+         continent,
+         country_name_fr = french_shor,
+         geometry) %>% 
+  mutate(geometry_centroid = st_centroid(geometry),
+         country_name_fr = if_else(grepl("Royaume-Uni", country_name_fr), "Royaume-Uni", country_name_fr))
 
-# `filter()` pour ne garder que les payrs européens
-geo_europe <- geo_world %>% 
-  filter(grepl(".*europe.*", continent, ignore.case = TRUE))
 
-# Certaines informations telles que le nom des pays, codes, et noms français sont
-# présents dans ce df, rendant l'import fait plus tôt (ligne ~70...) redondant.
-# À re-factoriser...
 
-# Assemblage du df pour leaflet ---- 
-
-# Il y a sans doute un moyen plus concis de faire ces transformations...
-alcohol_geo <- alcohol %>%
-  group_by(country_code, sex) %>%
-  mutate(total_avg = mean(deaths)) %>%
-  ungroup() %>%
-  pivot_longer(c(total_avg, year), names_to = "type", values_to = "year") %>%
-  mutate(
-    deaths = if_else(type == "total_avg", year, round(deaths)),
-    year = ifelse(type == "total_avg", NA, round(year)),
-  ) %>%
-  unique() %>%
-  mutate(deaths = round(deaths)) %>% 
-  pivot_wider(names_from = sex, names_prefix = "deaths_", values_from = deaths) %>% 
-  right_join(y = geo_europe, by = c("country_code" = "color_code")) %>% 
-  select(starts_with("country_"), type, year, starts_with("deaths_"), geometry) %>% 
+alcohol_geo <- right_join(geo_world, alcohol) %>% 
   st_as_sf() %>% 
-  mutate(geometry_center = st_centroid(geometry))
+  relocate(contains("geometry"), .after = last_col())
+
+alcohol_stats_geo <- right_join(geo_world, alcohol_stats) %>%  
+  st_as_sf() %>% 
+  relocate(contains("geometry"), .after = last_col())
 
 
 
-
-# Functions to be called by shiny's server function ----
-
-draw_table <- function(alcohol) {
-  alcohol <- alcohol %>%
-    select(
-      Pays = country_name_fr,
-      Année = year, 
-      Sexe = sex,
-      `Morts par intoxication alcoolique` = deaths)
+alcohol <- alcohol_geo %>% 
+  st_drop_geometry() %>% 
+  select(-contains("geometry"))
   
-  return(alcohol)
+alcohol_stats <- alcohol_stats_geo %>% 
+  st_drop_geometry() %>% 
+  select(-contains("geometry"))
+
+
+# for country input
+country_list <- alcohol %>%
+  select(contains("country_")) %>%
+  unique() %>%
+  arrange(country_name_fr) %>%
+  add_row(country_code = "ALL",
+          country_name_fr = "Total",
+          .before = 1)
+
+# Cleanup
+remove(alcohol_csv_path, geo_world)
+
+
+
+# Functions to be called by Shiny's `server` function ----
+
+draw_info_HTML <- function() {
+  return(
+    tags$div(
+      tags$h3("À propos"),
+      tags$p("Données provenant du data set",
+             tags$em("Alcohol abuse (including alcoholic psychosis), number of deaths, by sex"),
+             "disponible sur le European Health Information Gateway de l'OMS."))
+    )
 }
 
-draw_plotly <- function(alcohol, selected_country_code = "EUROPE") {
-  if (selected_country_code == "EUROPE" | !(selected_country_code %in% alcohol$country_code)) {
-    alcohol_for_plot <- alcohol %>% 
-      group_by(year, sex) %>% 
-      summarise(deaths = sum(deaths))
+draw_table <- function(average = FALSE) {
+  if (average) {
+    alcohol_for_table <- alcohol_stats %>% 
+      select(Pays = country_name_fr,
+             `Intervalle données disponibles` = paste0(year_start, "-", year_end),
+             `Pic de mortalité` = highest_year,
+             `Moyenne morts/an (F)`   = deaths_female,
+             `Moyenne morts/an (H)`   = deaths_male,
+             `Moyenne morts/an (H+F)` = deaths_all)
   } else {
-    alcohol_for_plot <- alcohol %>% 
-      filter(country_code == selected_country_code) %>% 
-      group_by(year, sex)
+    alcohol_for_table <- alcohol %>%
+      select(Pays = country_name_fr,
+             Année = year,
+             `Morts (F)`   = deaths_female,
+             `Morts (H)`   = deaths_male,
+             `Morts (H+F)` = deaths_all)
   }
   
-  plot <- alcohol_for_plot %>%
-  ggplot(aes(x = year, y = deaths, color = sex)) +
-    geom_line() +
-    theme_minimal()
-  
-  return(ggplotly(plot))
+  return(alcohol_for_table)
 }
 
-get_statistics <- function(alcohol, selected_country_code = "EUROPE") {
-  # if (!(selected_country_code %in% alcohol$country_code)) {
-  #   selected_country_code = "EUROPE"
-  # }
+draw_plotly <- function(selected_country_code = "ALL", selected_country_code_2 = "NONE") {
+  if (selected_country_code == "ALL" | !(selected_country_code %in% alcohol$country_code)) {
+    alcohol_for_plot <- alcohol %>% 
+      group_by(year) %>% 
+      summarise(across(starts_with("deaths_"), .fns =  sum, na.rm=T)) %>% 
+      mutate(country_code = "ALL",
+             country_name_fr = "Total somme") %>% 
+      bind_rows(filter(alcohol, country_code == selected_country_code_2))
+  } else {
+    alcohol_for_plot <- alcohol %>%
+      filter(country_code %in% c(selected_country_code, selected_country_code_2)) %>%
+      group_by(year)
+  }
   
-  alcohol_filtered <- alcohol %>% 
-    filter(country_code == selected_country_code | selected_country_code == "EUROPE")
-    
-  sex_summarise <- alcohol_filtered %>% 
-    group_by(sex) %>% 
-    summarise(mean = mean(deaths))
-    
-  max_year <- alcohol_filtered$year[which(alcohol_filtered$deaths == max(alcohol_filtered$deaths))]
-  
-  return(
-    list(
-      country_name = ifelse(selected_country_code == "EUROPE", "Toute l'Europe", filter(alcohol, country_code == selected_country_code)$country_name_fr[1]),
-      mean_all     = sex_summarise$mean[1],
-      mean_female  = sex_summarise$mean[2],
-      mean_male    = sex_summarise$mean[3],
-      max_year     = max_year[1],
-      start_year   = min(alcohol_filtered$year),
-      end_year     = max(alcohol_filtered$year)
+
+  custom_tooltip <- function(series, year, deaths) {
+    return(paste0(series,
+                  "\n  Année : ", year,
+                  "\n  Morts : ", format(deaths, big.mark=" ")))
+  }
+
+  plotly_title <- paste0(
+    "Morts par intoxication alcoolique <br>par année (",
+       if_else(selected_country_code == "ALL", 
+               "somme totale", 
+               country_list$country_name_fr[which(country_list$country_code == selected_country_code)]),
+       if_else(selected_country_code_2 == "NONE", "",
+               paste0(" et ", country_list$country_name_fr[which(country_list$country_code == selected_country_code_2)])),
+       ")"
     )
-  )
-}
-
-stats_HTML <- function(alcohol, country_eu) {
-  stats <- get_statistics(alcohol, country_eu)
-  return({
-    tags$ul(
-      tags$li("Pays : ", stats$country_name),
-      tags$li("Moyenne morts/an :        ", round(stats$mean_all, 2)),
-      tags$li("Moyenne morts/an hommes : ", round(stats$mean_male)),
-      tags$li("Moyenne morts/an femmes : ", round(stats$mean_female)),
-      tags$li("Année max morts :         ", stats$max_year),
-      tags$li(`style` = "font-size: 0.6rem; font-style: italics;", 
-              "Données disponibles : ", stats$start_year, " à ", stats$end_year, ".")
-    )
-  })
-}
-
-
-draw_leaflet <- function(alcohol_geo, year, sex = "all") {
-  alcohol_geo_local <- alcohol_geo
-  if (is.na(year))
-    alcohol_geo_local <- filter(alcohol_geo, type != "year")
-  else
-    alcohol_geo_local <-  filter(alcohol_geo, type == "year")
   
-  deaths_sex <- paste0("deaths_", sex)
+  if (selected_country_code_2 != "NONE") {
+    plot <- alcohol_for_plot %>%
+      ggplot(aes(x = year, y = deaths_all, colour = country_code, group = 1)) +
+      geom_line(aes(text = custom_tooltip("Total", year, deaths_all)), size = 1.2) +
+      geom_line(aes(text = custom_tooltip("Total", year, deaths_all)), size = 1.2) +
+      labs(title = "Morts par intoxications \nalcoolique par année",
+           x = "Année", y = "Morts par intoxications alcoolique par année") +
+      scale_colour_discrete(name = "") +
+      theme_minimal()
+    
+  } else {
+    plot <- alcohol_for_plot %>%
+      ggplot(aes(x = year, group = 1)) +
+        geom_line(aes(y = deaths_all,    colour = "Total",  text = custom_tooltip("Total",  year, deaths_all)),    size = 1.2) +
+        geom_line(aes(y = deaths_female, colour = "Femmes", text = custom_tooltip("Femmes", year, deaths_female)), size = 1.2) +
+        geom_line(aes(y = deaths_male,   colour = "Hommes", text = custom_tooltip("Hommes", year, deaths_male)),   size = 1.2) +
+        labs(title = "Morts par intoxications \nalcoolique par année",
+             x = "Année", y = "Morts par intoxications alcoolique par année") +
+        scale_colour_discrete(name = "") +
+        theme_minimal()
+  }
+  
+  return(ggplotly(plot, tooltip = c("text")) %>% layout(title = list(text = plotly_title)))
+}
 
-  palette <- colorNumeric(palette = "Reds", domain = alcohol_geo_local[[deaths_sex]], reverse = FALSE)
+stats_output <- function(selected_country_code, per_million = TRUE) {
+  stats <- alcohol_stats %>% filter(country_code == selected_country_code)
+  
+  
+  col_suffix <- if_else(per_million, "_million", "")
+  value_name    <- if_else(per_million, "Moyenne morts/million par an", "Moyenne morts par an")
+  
+  return(paste0(
+    "<table class='leaflet-label'>",
+      "<tr><th colspan='2'>", stats$country_name_fr, "</th></tr>",
+      "<tr><td>", value_name, " H+F",     "</td><td>", stats[[paste0("deaths_all", col_suffix)]],    "</td></tr>",
+      "<tr><td>", value_name, " F",       "</td><td>", stats[[paste0("deaths_female", col_suffix)]], "</td></tr>",
+      "<tr><td>", value_name, " H",       "</td><td>", stats[[paste0("deaths_male", col_suffix)]],   "</td></tr>",
+      "<tr><td>", "Année pic",            "</td><td>", stats$highest_year,  "</td></tr>",
+      "<tr><td>", "Données disponibles",  "</td><td>", stats$start_year, " à ", stats$end_year,      "</td></tr>",
+    "</table>"
+    ))
+}
+
+draw_leaflet <- function(avg = TRUE, sex_column = "all", selected_year = NULL, 
+                         selected_palette = "quantile",  country_labels = FALSE,
+                         legend = FALSE, per_million = TRUE) {
+  if (avg) {
+    alcohol_for_leaflet <- alcohol_stats_geo
+    domain <- alcohol_for_leaflet[[sex_column]]
+    labels <- stats_output(alcohol_for_leaflet$country_code, per_million) %>% lapply(HTML)
+  } else {
+    domain <- alcohol_geo[[sex_column]]
+    alcohol_for_leaflet <- alcohol_geo %>%
+      filter(year == selected_year)
+    
+    if (per_million) {
+      labels <- paste0("<strong>", alcohol_for_leaflet$country_name_fr, "</strong><br/>",
+                       alcohol_for_leaflet$deaths_all_million, " morts/million en ", selected_year) %>%  lapply(HTML)
+    } else {
+      labels <- paste0("<strong>", alcohol_for_leaflet$country_name_fr, "</strong><br/>", 
+                       alcohol_for_leaflet$deaths_all, " morts en ", selected_year) %>%  lapply(HTML)    
+    }
+  }
+
+  if (selected_palette == "quantile") {
+    palette <- colorQuantile("Blues", alcohol_for_leaflet[[sex_column]], n = 8)
+  } else {
+    palette <- colorNumeric(palette = "Blues", domain = domain, reverse = FALSE)
+  }
   
   country_labels_options <- labelOptions(noHide = T, direction = "center", textOnly = TRUE,
-                              style = list(
-                                "color" = "white", 
-                                "font-family" = "sans-serif", 
-                                "font-weight" = "normal", 
-                                "font-size"   = "0.5rem", 
-                                "text-shadow" = "1px 0 2px black, -1px 0 2px black, 0 1px 2px black, 0 -1px 2px black"))
+                                         style = list("color" = "white",
+                                                "font-family" = "sans-serif",
+                                                "font-weight" = "normal",
+                                                "font-size"   = "0.5rem",
+                                                "text-shadow" = "1px 0 2px black, -1px 0 2px black, 0 1px 2px black, 0 -1px 2px black"))
   
-  leaflet_map <- leaflet(alcohol_geo_local) %>%
-    addProviderTiles(providers$CartoDB.DarkMatterNoLabels) %>%
-    addPolygons(fillColor = ~palette(alcohol_geo_local[[deaths_sex]]),
-                label = paste0(alcohol_geo$country_name_fr, " : ", alcohol_geo[[deaths_sex]], " morts/an ??"),
+  sex_column <- paste0("deaths_", sex_column, if_else(per_million, "_million", ""))
+  
+  leaflet_map <- leaflet(alcohol_for_leaflet) %>%
+    addProviderTiles(providers$CartoDB.PositronNoLabels) %>%
+    addPolygons(fillColor = ~palette(alcohol_for_leaflet[[sex_column]]),
+                label = ~labels,
                 stroke = FALSE, smoothFactor = 0.3, fillOpacity = 1) %>%
-    setView(lng = 16, lat = 53, zoom = 3) %>%
-    addLabelOnlyMarkers(label = alcohol_geo_local$country_name_fr,
-                        data = alcohol_geo_local$geometry_center,
-                        labelOptions = country_labels_options)
+    {if (legend) addLegend(., "topright", pal = palette, values = ~alcohol_for_leaflet[[sex_column]],
+              title = if_else(selected_palette == "quantile", "Percentiles", "Echelle linéaire"),
+              labFormat = labelFormat(suffix = if_else(selected_palette == "quantile", "", " morts/an")),
+              opacity = 0.75) else .} %>%
+    setView(lng = 18, lat = 55, zoom = 3) %>%
+    {if(country_labels) addLabelOnlyMarkers(., label = alcohol_for_leaflet$country_name_fr,
+                      data = alcohol_for_leaflet$geometry_centroid,
+                      labelOptions = country_labels_options
+                      ) else .}
+
+  # paste0(alcohol_for_leaflet$country_name_fr,
+  #        " : ",
+  #        alcohol_for_leaflet[[sex_column]],
+  #        ifelse(avg,
+  #               paste0(" morts/an (moyenne ", start_year, "-", end_year, ")"),
+  #               paste0(" morts en ", alcohol_for_leaflet$year)))
+  
   
   return(leaflet_map)
 }
 
-# UI for application ------------------
+
+# UI ----
 ui <- fluidPage(
-    theme = bslib::bs_theme(bootswatch = "darkly"),
-    
-    tags$head(
-      tags$style(HTML("
-        ul {
+  theme = bslib::bs_theme(bootswatch = "darkly"),
+  # CSS ----
+  tags$head(
+    tags$style(HTML("
+        .tab-pane.active {
+          margin-top: 15px;
+        }
+        
+        footer { font-size: 0.8rem; }
+        
+        .sources-list {
           list-style: none;
-          margin-top: 20px;
-        }
-        footer {
-          font-size: 0.7rem;
-        }
-        footer ul {
+          margin-top: 10px;
           padding-left: 10px;
         }
-      "))
-    ),
-    
-    # Application title
-    titlePanel("Alcool"),
-    
-    # Layout with a Sidebar
-    sidebarLayout(
-        sidebarPanel(
-          selectInput(
-            inputId = "country_eu",
-            label   = "Pays",
-            choices = setNames(
-              c("EUROPE", unique(alcohol$country_code)), 
-              c("Europe", unique(alcohol$country_name_fr))
-          )),
-          textOutput("selected_code"),
-          hr(),
-          tags$footer(
-            tags$h6("Sources"),
-            tags$ul(
-              tags$li(
-                tags$a("WHO - European Health Information Gateway", 
-                       href="https://gateway.euro.who.int/en/indicators/hfamdb_87-deaths-alcohol-abuse-including-alcoholic-psychosis/")
-              ),
-              tags$li(tags$a("L. Duncalfe", href="https://github.com/lukes/ISO-3166-Countries-with-Regional-Codes")),
-              tags$li(tags$a("Wikipedia", href="https://en.wikipedia.org/wiki/ISO_3166-1#Officially_assigned_code_elements")),
-              tags$li(tags$a("UN Statistics", href="https://unstats.un.org/unsd/methodology/m49/overview"))
-            ))
-        ),
-        mainPanel(
-          tabsetPanel(
-            tabPanel("Résumé", htmlOutput("stats_ui")),
-            tabPanel("Données brutes", dataTableOutput("table")),
-            tabPanel("Graphique", plotlyOutput("plot")),
-            tabPanel("Carte", 
-                     leafletOutput("leaflet"), 
-                     sliderInput(inputId = "selected_year", label = "Année", min = 1976, max = 2020, value = 2000)) # TODODODOO
-          ),
+        
+        .sources-list > li { margin-bottom: 10px; }
 
+        .table { --bs-table-striped-bg: #282828; }
+        #DataTables_Table_0 > tfoot { display: none; }
+        
+        .paginate_button {
+          margin: 3px;
+          /* background: #222;
+          padding: 3px;
+          border-radius: 0.3em; */
+        }
+        
+        .leaflet-label {
+          white-space: pre;
+          margin: 0;
+        }
+        
+        .leaflet-label tr td {
+          padding: 0 6px;
+        }
+        
+        .leaflet-label th {
+          font-weight: bold;
+          font-size: 0.8rem;
+          text-align: center;
+        }
+        
+        .year-select-text {
+          font-size: 0.8rem; 
+          padding: 0; 
+          margin: 0 0 15px 0; 
+          font-style: italic;
+        }
+        
+        .display-options::before {
+          content: 'Affichage';
+        }
+        
+        .display-options {
+          font-size: 0.8rem;
+          border-radius: 5px;
+          background: #555;
+          padding: 10px;
+        }
+        
+        .display-options .shiny-input-container,
+        .year-select .shiny-input-container{
+        margin-bottom:0;
+        }
+        
+        "))
+  ),
+
+  # Application title----
+  titlePanel("Alcool"),
+  fluidRow(
+    tags$p(paste("Morts par intoxication à l'alcool par année en Europe de", min(alcohol$year), "à", max(alcohol$year)))
+  ),
+  
+  # Layout with a Sidebar
+  sidebarLayout(
+    sidebarPanel(
+      conditionalPanel(condition = "input.selected_tab == 'info_tab'", NULL),
+      
+      conditionalPanel(condition = "input.selected_tab == 'table'", NULL),
+      
+      conditionalPanel(condition = "input.selected_tab == 'plot'",
+                       selectInput(inputId = "country_select",
+                                   label   = "Pays",
+                                   choices = setNames(country_list$country_code, nm = country_list$country_name_fr)),
+                       selectInput(inputId = "country_select_2",
+                                   label   = "Comparer",
+                                   choices = setNames(c("NONE", country_list$country_code[2:length(country_list$country_code)]), 
+                                                      nm = c("-", country_list$country_name_fr[2:length(country_list$country_code)])))),
+      
+      conditionalPanel(condition = "input.selected_tab == 'map'",
+                       checkboxInput(inputId = "avg_select",
+                                     label = "Moyenne sur toutes les années disponibles",
+                                     value = TRUE),
+                       tags$p("Sélectionner une année ne fonctionne que si la case 'Moyenne sur toutes les années' n'est pas cochée.",
+                              class = "year-select-text"),
+                       sliderInput(inputId = "year_select",
+                                   label   = "Année",
+                                   min     = min(alcohol$year), # TODODODOO
+                                   max     = max(alcohol$year),
+                                   value   = max(alcohol$year),
+                                   animate = animationOptions(interval = 500),
+                                   sep     = " "),
+                       selectInput(inputId = "palette_select", label = "Type de légende", 
+                                   choices = c("Quantiles" = "quantile", "Numérique linéaire" = "numeric")),
+                       radioButtons(inputId = "sex_select",
+                                    label   = "Sexe", 
+                                    choices = c("Total" = "all", "Femmes" = "female", "Hommes" = "male")),
+                       checkboxInput(inputId = "per_million",
+                                     label   = "Données en nombre de morts par million de personnes",
+                                     value   = TRUE),
+                       tags$div(class = "display-options",
+                         checkboxInput(inputId = "legend_select",
+                                       label = "Afficher la légende",
+                                       value = FALSE),
+                         checkboxInput(inputId = "country_labels_select",
+                                       label = "Afficher noms des pays",
+                                       value = FALSE))
+                       ),
+      
+    tags$hr(),
+    tags$footer(
+      tags$a(tags$div(tags$img(src = "https://upload.wikimedia.org/wikipedia/commons/9/91/Octicons-mark-github.svg", 
+                               style = "max-width: 15px; margin-right: 10px;"), 
+            tags$span("GitHub")), href="https://github.com/ceswap/pir-s3-project"),
+      tags$h6("Sources"),
+      tags$ul(class = "sources-list",
+        tags$li(tags$a("WHO - European Health Information Gateway",
+                       href="https://gateway.euro.who.int/en/indicators/hfamdb_87-deaths-alcohol-abuse-including-alcoholic-psychosis/")),
+        tags$li(tags$a("World Administrative Boundaries, World Food Programme (UN agency)", 
+                       href = "https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/information/")),
+        tags$li(tags$a("UN, Department of Economic and Social Affairs, Population Division. World Population Prospects 2022", 
+                       href = "https://population.un.org/wpp/Download/Standard/CSV/"))
         )
-    )
+      )
+    ),
+
+    mainPanel(
+      tabsetPanel(
+        tabPanel("À propos",       htmlOutput("info_tab"),   value="info_tab"),
+        tabPanel("Graphique",      plotlyOutput("plot"),     value="plot"),
+        tabPanel("Données brutes", dataTableOutput("table"), value="table"),
+        tabPanel("Carte",          htmlOutput("leaflet_title"), leafletOutput("leaflet"), value="map"),
+        id = "selected_tab"
+        )
+      )
+  )
 )
+
 
 # Server function ------------------------
 server <- function(input, output) {
 
-  output$table <- renderDataTable(draw_table(alcohol))
-  output$plot <- renderPlotly(draw_plotly(alcohol, selected_country_code = input$country_eu))
-  output$leaflet <- renderLeaflet(draw_leaflet(alcohol_geo, NA, "male"))
-  output$selected_code <- renderText(paste0("(debug) country_code: ", input$country_eu))
-
-  output$stats_ui <- renderUI(stats_HTML(alcohol, input$country_eu))
+  output$info_tab <- renderUI(draw_info_HTML())
+  output$table <- renderDataTable(draw_table(FALSE), 
+                                  options = list("pageLength" = 10, 
+                                                 "lengthMenu" = list(c(10, 25, 50, -1), c('10', '25', '50', 'Tout'))))
+  
+  output$plot <- renderPlotly(draw_plotly(selected_country_code   = input$country_select, 
+                                          selected_country_code_2 = input$country_select_2))
+  
+  output$leaflet <- renderLeaflet(draw_leaflet(avg = input$avg_select, 
+                                               sex_column = input$sex_select, 
+                                               selected_year = input$year_select,
+                                               selected_palette = input$palette_select,
+                                               country_labels = input$country_labels_select,
+                                               legend = input$legend_select,
+                                               per_million = input$per_million))
+  
+  output$leaflet_title <- renderUI(tags$h4(if_else(input$avg_select, 
+                                                   "Moyenne par pays", 
+                                                   paste0("Données pour l'année ", input$year_select))))
 }
 
 # Run the application 
