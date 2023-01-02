@@ -19,6 +19,9 @@ Le programme [RStudio](https://posit.co/download/rstudio-desktop/) est requis po
 
 Les fichiers données nécessaires sont déjà téléchargés et présents dans `data/`, ce qui rend la taille du projet non négligeable. Cependant l'application tente de les télécharger automatiquement si ils ne sont pas présents (à l'exception d'un fichier en particulier sur certains systèmes (problème OpenSSL avec serveur de téléchargement)).
 
+Testé sous R `3.6.3` avec session RStudio `2022.7.2.576.12` server mode (Ubuntu), 
+et sous R `4.2.2` en local avec RStudio `2022.7.1.554` (Ubuntu).
+
 ## Sources
 
 Voici les sources d'où proviennent les données nécessaires :

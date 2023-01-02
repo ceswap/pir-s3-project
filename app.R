@@ -7,18 +7,25 @@
 #                                      voir README.md #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-# TODO setwd() 
+# TODO setwd() !!!!
+
 # TODO Ajouter /million dans graph
 # TODO Ajouter /million et toggle stats dans datatable
 # TODO Quantile ? explain ?
 # TODO README quelle version R ??? etc...
-#
+# TODO Désactiver slider annes si case cochée
+# TODO Légende carte ajouter par million d'habitants quand relevant
+# TODO UNZIP READ DELETE UNZIPPED everytime!
+
+if (Sys.getenv("RSTUDIO") == "1") {
+  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+} else {
+  setwd(getSrcDirectory()[1])
+}
 
 # PACKAGES ----
 # Installation (si besoin) et chargement
-packages <- c("tidyverse", "shiny", "plotly", 
-              "leaflet", "maps", "sf",
-              "stringr", "htmltools")
+packages <- c("tidyverse", "shiny", "plotly", "leaflet", "sf")
 
 installed_packages <- packages %in% rownames(installed.packages())
 
@@ -90,7 +97,7 @@ download_rename_file(
 
 # Chargement et transformations
 # population <- read_delim(file.path("data", "WPP2022_TotalPopulationBySex.csv"), delim = ",") %>% # ORIGINAL LINE, crashed RStudio on the server
-population <- read.csv(file.path("data", "WPP2022_TotalPopulationBySex.csv")) %>% as.tibble() %>% 
+population <- read.csv(file.path("data", "WPP2022_TotalPopulationBySex.csv")) %>% as.tibble() %>%cd
   filter(LocTypeName == "Country/Area") %>% # exclusion des données agrégées
   select(country_code = ISO3_code,
          year         = Time,
