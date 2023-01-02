@@ -8,22 +8,26 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # TODO setwd() !!!!
-
-# TODO Ajouter /million dans graph
-# TODO Ajouter /million et toggle stats dans datatable
-# TODO Quantile ? explain ?
 # TODO README quelle version R ??? etc...
-# TODO Désactiver slider annes si case cochée
-# TODO Légende carte ajouter par million d'habitants quand relevant
 # TODO UNZIP READ DELETE UNZIPPED everytime!
 
+# TODO Ajouter /million et toggle stats dans datatable
+# TODO Ajouter /million dans graph
+# TODO Légende carte ajouter par million d'habitants quand relevant
+# TODO Désactiver slider annees si case cochée
+# TODO Quantile ? explain ?
+
+
+
+# PACKAGES & WORKING DIR ----
+
+# Pour se placer dans le dossier de ce fichier
 if (Sys.getenv("RSTUDIO") == "1") {
   setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 } else {
   setwd(getSrcDirectory()[1])
 }
 
-# PACKAGES ----
 # Installation (si besoin) et chargement
 packages <- c("tidyverse", "shiny", "plotly", "leaflet", "sf")
 
@@ -36,36 +40,49 @@ if (any(installed_packages == FALSE)) {
 invisible(lapply(packages, library, character.only = TRUE))
 remove(packages, installed_packages)
 
-# SETUP ----
+# DATA SETUP ----
 
 # Fonction pour gérer le téléchargement des fichiers si ils ne sont pas déjà présents
 download_rename_file <- function(url, filename, dir = ".") {
-  name <- sub("\\..*", "", filename)
-  ext  <- sub(".*?\\.", ".", filename)
+  name   <- sub("\\..*", "", filename)
+  ext    <- sub(".*?\\.", ".", filename)
   search <- grepl(pattern = paste0(name, ".*"), x = list.files(path=dir))
+  zip    <- any(grepl("\\.zip", ext))
   
   if (!any(search)) {
     cat("Creating directory", file.path(dir, ""), "if it does not exist...\n")
-    dir.create(dir, showWarnings = FALSE)
-    
+    dir.create(dir, showWarnings = FALSE) # Pretty sure this is not necessary
     filename <- paste0(name, "_", Sys.Date(), "_", format(Sys.time(), "%H-%M"), ext)
     filepath <- file.path(dir, filename)
-    
     cat("Downloading file from URL to", filepath, "...\n")
     download.file(url, filepath)
     
-    if (any(grepl("\\.zip", ext))) {
+    if (zip) {
+      unzipped <- unzip(filepath, exdir = dir)
       cat("Unzipped contents of", filename, "to", file.path(dir, ""), "\n")
-      unzip(filepath, exdir="data")
+      return(unzipped)
     }
-    
     return(filepath)
-
+    
   } else {
     existing_filepath <- list.files(path = dir, full.names = TRUE)[which(search == TRUE)][1]
     cat("File exists:", existing_filepath, "\n")
     
+    if (zip) {
+      unzipped <- unzip(existing_filepath, exdir = dir)
+      cat("Unzipped contents of", filename, "to", file.path(dir, ""), "\n")
+      return(unzipped)
+    }
     return(existing_filepath)
+  }
+}
+
+delete_file <- function(filepath_s) {
+  if (all(file.exists(filepath_s))) {
+    unlink(filepath_s) # on supprime le(s) fichier(s)
+    cat("Deleted file(s)", filepath_s, "\n")
+  } else {
+    cat("Coundn't find and delete file(s):", filepath_s, "\n")
   }
 }
 
@@ -90,14 +107,14 @@ alcohol <- read_delim(alcohol_csv_path, delim = ",", skip = 28) %>%
 # Très long CSV (ZIP) avec données de population par sexe, pays et année afin de
 # calculer des chiffres par million d'habitants plus tard
 # /!\ ERREUR SSL QUAND ON TENTE DE LE TÉLÉCHARGER AVEC download.file() /!\
-download_rename_file(
+pop_unzipped_filepath <- download_rename_file(
   url = "https://population.un.org/wpp/Download/Files/1_Indicators%20(Standard)/CSV_FILES/WPP2022_TotalPopulationBySex.zip",
-  filename = "population",
+  filename = "population.zip",
   dir = "data") 
 
 # Chargement et transformations
-# population <- read_delim(file.path("data", "WPP2022_TotalPopulationBySex.csv"), delim = ",") %>% # ORIGINAL LINE, crashed RStudio on the server
-population <- read.csv(file.path("data", "WPP2022_TotalPopulationBySex.csv")) %>% as.tibble() %>%cd
+# population <- read_delim(file.path("data", population_unzipped_filename), delim = ",") %>% # ORIGINAL LINE, crashed RStudio on the server
+population <- read.csv(pop_unzipped_filepath) %>% as.tibble() %>%
   filter(LocTypeName == "Country/Area") %>% # exclusion des données agrégées
   select(country_code = ISO3_code,
          year         = Time,
@@ -105,6 +122,8 @@ population <- read.csv(file.path("data", "WPP2022_TotalPopulationBySex.csv")) %>
          pop_female   = PopFemale,
          pop_male     = PopMale) %>% 
   mutate(across(starts_with("pop_"), ~ .x / 1000)) # changement d'unité de millier à million d'habitants
+
+delete_file(pop_unzipped_filepath) # Supprimer le fichier décompressé lourd (60.3 MB pour celui ci)
 
 # left_join() : Ajout des données de population aux 
 # lignes du df principal (alcohol) et calcul des données par million avec mutate()
@@ -119,7 +138,8 @@ alcohol <- alcohol %>%
 # df qui précalcule des infos statistiques par pays et sexe 
 alcohol_stats <- alcohol %>% 
   group_by(country_code) %>% # Tout est calculé ci-dessous PAR PAYS
-  mutate(highest_year = year[which.max(deaths_all)], # L'année avec le plus de morts
+  mutate(highest_year         = year[which.max(deaths_all)], # L'année avec le plus de morts
+         highest_year_million = year[which.max(deaths_all_million)],
          max          = max(deaths_all), # Le maximum de morts/an
          start_year   = min(year),       # La première année avec des données disponibles
          end_year     = max(year),       # La dernière année avec des données disponibles
@@ -139,18 +159,20 @@ alcohol_stats <- alcohol %>%
 # Données pour leaflet notamment
 
 # Téléchargement et dézippage du Shapefile (si un zipfile n'existe pas déjà)
-download_rename_file(
+geo_unzipped_filepaths <- download_rename_file(
   url = "https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/download/?format=shp&timezone=Europe/Paris&lang=en", 
   filename = "geo_world.zip",  dir = "data")
 
 # Chargement du Shapefile et cuisine des colonnes, 
-geo_world <- read_sf(file.path("data", "world-administrative-boundaries.shp")) %>% 
+geo_world <- read_sf(geo_unzipped_filepaths[[grep(".*\\.shp$", geo_unzipped_filepaths)]]) %>% 
   select(country_code = iso3,
          continent,
          country_name_fr = french_shor,
          geometry) %>% 
   mutate(geometry_centroid = st_centroid(geometry), # Génération d'un POINT centroid pour chaque POLYGON (mais peu utilisé)
          country_name_fr = if_else(grepl("Royaume-Uni", country_name_fr), "Royaume-Uni", country_name_fr)) # Le nom du R-U était trop long
+
+delete_file(geo_unzipped_filepaths)
 
 # Construction des df avec données principale + données géographiques
 alcohol_geo <- right_join(geo_world, alcohol) %>% 
@@ -182,11 +204,12 @@ country_list <- alcohol %>%
           country_name_fr = "Total",
           .before = 1)
 
-remove(alcohol_csv_path, geo_world) # Plus besoin de ça
+remove(population, alcohol_csv_path, geo_world, pop_unzipped_filepath, 
+       geo_unzipped_filepaths, download_rename_file, delete_file) # Plus besoin de tout ça
 
 # FIN DE SETUP
 
-# FONCTIONS POUR SHINY SERVER ----
+# FONCTIONS DRAW POUR SHINY SERVER ----
 
   # FONCTION A PROPOS ---- 
 draw_info_HTML <- function() {
@@ -200,25 +223,61 @@ draw_info_HTML <- function() {
 }
 
   # FONCTION DATATABLE ---- 
-draw_table <- function(average = FALSE) {
-  if (average) {
-    alcohol_for_table <- alcohol_stats %>% 
-      select(Pays = country_name_fr,
-             `Intervalle données disponibles` = paste0(year_start, "-", year_end),
-             `Pic de mortalité` = highest_year,
-             `Moyenne morts/an (F)`   = deaths_female,
-             `Moyenne morts/an (H)`   = deaths_male,
-             `Moyenne morts/an (H+F)` = deaths_all)
-  } else {
+draw_table <- function(stats = FALSE, per_million = FALSE) {
+  if (stats) {
+    
+    if (per_million) {
+      alcohol_for_table <- alcohol_stats %>%
+        select(ends_with("_million"), contains("year"), country_name_fr, max_million) %>% 
+        rename(Pays = country_name_fr, `Année max morts/an / million` = highest_year_million, `Max morts/an / million` = max_million,
+               `Moy. morts/an / million (H+F)` = deaths_all_million, 
+               `Moy. morts/an / million (F)`   = deaths_female_million, 
+               `Moy. morts/an / million (H)`   = deaths_male_million)
+      
+    } else { # if (!per_million)
+      alcohol_for_table <- alcohol_stats %>%
+        select(matches("^deaths_.{3,6}$"), ends_with("_year"), country_name_fr, max) %>% 
+        rename(Pays = country_name_fr, `Année max morts/an` = highest_year, `Max morts/an` = max,
+               `Moy. morts/an (H+F)` = deaths_all, 
+               `Moy. morts/an (F)` = deaths_female, 
+               `Moy. morts/an (H)` = deaths_male)
+    }
+    
+    alcohol_for_table <- alcohol_for_table %>% 
+      mutate(`Données dispo` = paste0(alcohol_stats$start_year, "-", alcohol_stats$end_year)) %>% 
+      select(-ends_with("_year"))
+    
+  } else { # if (!stats)
+
+    if (per_million) {
     alcohol_for_table <- alcohol %>%
-      select(Pays = country_name_fr,
-             Année = year,
-             `Morts (F)`   = deaths_female,
-             `Morts (H)`   = deaths_male,
-             `Morts (H+F)` = deaths_all)
+      select(ends_with("_million"), country_name_fr, year) %>% 
+      rename(Pays = country_name_fr, Année = year,
+             `Morts / million (H+F)` = deaths_all_million, 
+             `Morts / million (F)` = deaths_female_million, 
+             `Morts / million (H)` = deaths_male_million)
+      
+    } else { # if (!per_million)
+    alcohol_for_table <- alcohol %>%
+      select(matches("^deaths_.{3,6}$"), country_name_fr, year) %>% 
+        rename(Pays = country_name_fr, Année = year,
+               `Morts (H+F)` = deaths_all, 
+               `Morts (F)` = deaths_female, 
+               `Morts (H)` = deaths_male)
+    }
   }
   
+  alcohol_for_table <- alcohol_for_table %>% 
+    relocate(`Pays`, .before = 1)
+
   return(alcohol_for_table)
+}
+
+  # FONCTION TOOLTIP POUR PLOT ----
+custom_tooltip <- function(series, year, deaths) {
+  return(paste0(series,
+                "\n  Année : ", year,
+                "\n  Morts : ", format(deaths, big.mark=" ")))
 }
 
   # FONCTION PLOT ----
@@ -234,12 +293,6 @@ draw_plotly <- function(selected_country_code = "ALL", selected_country_code_2 =
     alcohol_for_plot <- alcohol %>%
       filter(country_code %in% c(selected_country_code, selected_country_code_2)) %>%
       group_by(year)
-  }
-  
-  custom_tooltip <- function(series, year, deaths) {
-    return(paste0(series,
-                  "\n  Année : ", year,
-                  "\n  Morts : ", format(deaths, big.mark=" ")))
   }
 
   plotly_title <- paste0(
@@ -276,7 +329,7 @@ draw_plotly <- function(selected_country_code = "ALL", selected_country_code_2 =
   return(ggplotly(plot, tooltip = c("text")) %>% layout(title = list(text = plotly_title)))
 }
 
-  # FONCTION STATS TOOLTIP ----
+  # FONCTION STATS TOOLTIP POUR LEAFLET ----
 stats_output <- function(selected_country_code, per_million = TRUE) {
   stats <- alcohol_stats %>% filter(country_code == selected_country_code)
   
@@ -415,7 +468,13 @@ ui <- fluidPage(
       conditionalPanel(condition = "input.selected_tab == 'info_tab'", NULL), 
       
       # SIDEBAR POUR DATATABLE
-      conditionalPanel(condition = "input.selected_tab == 'table'", NULL),    
+      conditionalPanel(condition = "input.selected_tab == 'table'",
+                       checkboxInput(inputId = "table_stats_select",
+                                     label   = "Moyennes sur toutes les années",
+                                     value   = FALSE),
+                       checkboxInput(inputId = "table_per_million_select",
+                                     label   = "Données par million d'habitants",
+                                     value   = FALSE)),    
       
       # SIDEBAR POUR PLOT
       conditionalPanel(condition = "input.selected_tab == 'plot'",            
@@ -495,7 +554,7 @@ server <- function(input, output) {
   output$info_tab <- renderUI(draw_info_HTML())
   
   # OUTPUT DATATABLE
-  output$table <- renderDataTable(draw_table(FALSE),
+  output$table <- renderDataTable(draw_table(stats = input$table_stats_select, per_million = input$table_per_million_select),
                                   options = list("pageLength" = 10, 
                                                  "lengthMenu" = list(c(10, 25, 50, -1), c('10', '25', '50', 'Tout'))))
   
