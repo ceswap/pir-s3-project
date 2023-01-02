@@ -8,3 +8,15 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r} 
+  # FONCTION A PROPOS ---- 
+draw_info_HTML <- function() {
+  return(
+    tags$div(
+      tags$h3("À propos"),
+      tags$p("Données provenant du data set",
+             tags$em("Alcohol abuse (including alcoholic psychosis), number of deaths, by sex"),
+             "disponible sur le European Health Information Gateway de l'OMS."))
+    )
+}
+```

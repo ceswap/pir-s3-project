@@ -7,6 +7,13 @@
 #                                      voir README.md #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+# TODO setwd() 
+# TODO Ajouter /million dans graph
+# TODO Ajouter /million et toggle stats dans datatable
+# TODO Quantile ? explain ?
+# TODO README quelle version R ??? etc...
+#
+
 # PACKAGES ----
 # Installation (si besoin) et chargement
 packages <- c("tidyverse", "shiny", "plotly", 
@@ -82,7 +89,8 @@ download_rename_file(
   dir = "data") 
 
 # Chargement et transformations
-population <- read_delim(file.path("data", "WPP2022_TotalPopulationBySex.csv"), delim = ",") %>% 
+# population <- read_delim(file.path("data", "WPP2022_TotalPopulationBySex.csv"), delim = ",") %>% # ORIGINAL LINE, crashed RStudio on the server
+population <- read.csv(file.path("data", "WPP2022_TotalPopulationBySex.csv")) %>% as.tibble() %>% 
   filter(LocTypeName == "Country/Area") %>% # exclusion des données agrégées
   select(country_code = ISO3_code,
          year         = Time,
@@ -472,7 +480,6 @@ ui <- fluidPage(
       )
   )
 )
-
 
 # SHINY SERVER ----
 server <- function(input, output) {
