@@ -352,7 +352,7 @@ ui <- fluidPage(
         .sources-list > li { margin-bottom: 10px; }
         .table { --bs-table-striped-bg: #282828; }
         #DataTables_Table_0 > tfoot { display: none; }
-        .paginate_button { margin: 3px;}
+        .paginate_button { margin: 3px; }
         .leaflet-label {
           white-space: pre;
           margin: 0;
@@ -393,7 +393,7 @@ ui <- fluidPage(
   sidebarLayout(
     
     # SIDEBAR ---- 
-    sidebarPanel(
+    sidebarPanel(width = 4,
       
       # Plusieurs conditionalPanel() pour modifier le contenu de la sidebar en fonction du tabset sélectionné
       # SIDEBAR POUR A PROPOS
@@ -504,7 +504,10 @@ server <- function(input, output) {
 }
 
 # RUN IT
-shinyApp(options = , ui, server)
+if (Sys.getenv("RSTUDIO") == "1") {
+  shinyApp(ui, server) 
+} else {
+  runGadget(ui, server, viewer = browserViewer(browser = getOption("browser")))
+}
 
 # runGadget(ui, server, viewer = dialogViewer(dialogName = "Projet PIR", width = 1280, height = 800))
-# runGadget(ui, server, viewer = browserViewer(browser = getOption("browser")))

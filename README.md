@@ -8,13 +8,14 @@ Robinson Maury (DFGSM3) & César Wapler (DFGSM3)
 
 Téléchargez le zip de ce projet sur le [dépôt GitHub](https://github.com/ceswap/pir-s3-project) en cliquant sur le bouton vert "Code" puis "Download ZIP".
 
--   `app.R` est le fichier principal contenant la totalité du code pour l'application R Shiny.
+Le programme [RStudio](https://posit.co/download/rstudio-desktop/) est requis pour faire tourner cette application. 
 
--   `data/` contient les fichiers de données utilisées (`.csv`, `.shp`)
+## Installation et Utilisation
 
--   `Rapport.Rmd` est le compte-rendu écrit pour l'évaluation.
-
-## Installation
+- `app.R` est le fichier principal contenant la totalité du code pour l'application R Shiny.
+- `run.sh` permet de lancer l'application depuis le terminal sous linux dans le navigateur (non testé).
+- `data/` contient les fichiers de données utilisés (`.csv`, `.shp`).
+- `Rapport.Rmd` est le compte-rendu écrit pour l'évaluation.
 
 Les fichiers données nécessaires sont déjà téléchargés et présents dans `data/`, ce qui rend la taille du projet non négligeable. Cependant l'application tente de les télécharger automatiquement si ils ne sont pas présents (à l'exception d'un fichier en particulier sur certains systèmes (problème OpenSSL avec serveur de téléchargement)).
 
