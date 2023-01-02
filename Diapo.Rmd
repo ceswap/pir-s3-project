@@ -1,0 +1,41 @@
+---
+title: "PIR Langage de <br>Traitement des Données"
+subtitle: "Projet de fin d'UE | 2022-2023"
+author: "Robinson Maury et César Wapler"
+output: "ioslides_presentation"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{css, echo = FALSE}
+.img-row, .img-row > p {
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+}
+```
+
+## Introduction
+
+### Application R Shiny
+
+::: {.img-row}
+![](https://www.worldbank.org/content/dam/photos/780x439/2021/apr/Shiny-logo.png){width="33%"}
+![](https://www.rstudio.com/wp-content/uploads/2018/10/RStudio-Logo-Flat.png){width="33%"}
+:::
+
+### Données
+
+::: blue3
+*Deaths(\#), Alcohol abuse (including alcoholic psychosis)*
+:::
+
+:::{.img-row}
+![](./img/who.png){width="50%"}
+:::
+
+## Présentation de l'application
+
+...
