@@ -466,6 +466,7 @@ ui <- fluidPage(
           margin: 0 0 15px 0; 
           font-style: italic;
         }
+        .irs-grid-text { color: white !important; }
         .display-options::before {
           content: 'Affichage';
         }
