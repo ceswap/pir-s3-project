@@ -1,26 +1,24 @@
 ---
 title: "Rapport Projet PIR-S3 Langage de Traitement des Données"
 subtitle: "Sujet 2 R Shiny : Analyse exploratoire"
-author: "R. Maury et C. Wapler"
+author: "Robinson Maury (DFGSM3) et César Wapler (DFGSM3)"
 output: html_document
 ---
 
-```{=html}
-<style>
-  body { text-align: justify; }
-</style>
-```
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Introduction
 
-Bonjour, nous allons vous présenter notre projet qui est une application répondant au sujet 2 sur R shiny. L'Objectif est de pouvoir analyser un jeu de données de manière active grâce à une interface utilisateur. Nous avons choisi un jeu de données représentant le nombre de mort par intoxication alcoolique par année en fonction de pays et aussi en fonction du sexe. L'idée est de pouvoir lire et analyser des données qui intéressent l'utilisateur, de façon optimale, simple et interactive.
+Bonjour, nous allons vous présenter notre projet d’application répondant au sujet 2 sur R shiny. 
 
-Pour répondre à cette problématique, nous utilisons R, avec différentes librairies, afin d'extraire les données du dataset et de les présenter sous différentes formes (brutes, graphiques, cartographiques) et spécifiques à la demande de l'utilisateur. Cette application permet une étude dans le temps, mais aussi une comparaison dans l'espace et en fonction du sexe. Pour cela, nous avons eu besoin de trois jeux de données, le premier est "Death, acool abuse (including alcoholic psychosis) de World Health Organisation European Health Information Gateway, le deuxième regroupe des données sur les populations des pays étudiés world population prospects 2022 issu des données des nations unies et le dernier est World Administratives Boudaries pour les données sur les territoires nécessaires à la cartographie issu de Open datasoft
+L'Objectif est de pouvoir analyser un jeu de données de manière active grâce à une interface utilisateur. Nous avons choisi un jeu de données représentant le nombre de mort par intoxication alcoolique par année en fonction de pays et aussi en fonction du sexe. 
+L’idée est de pouvoir lire et analyser des données qui intéressent l’utilisateur, de façon optimale, simple et interactive.
 
-Notre présentation va se construire en 3 parties. D'abord nous allons faire une présentation générale de l'application, des fonctionnalités qu'elle offre et de la manière de l'utiliser. Puis, nous allons expliquer le fonctionnement du code qui décrit cette application. Enfin, nous allons faire une démonstration de l'application avec un exemple type d'utilisation.
+Pour répondre à cette problématique, nous utilisons R, avec différentes librairies, afin d’extraire les données du dataset et de les présenter sous différentes formes (brutes, graphiques, cartographiques) et spécifiques à la demande de l’utilisateur.  Cette application permet une étude dans le temps, mais aussi une comparaison dans l’espace et en fonction du sexe. Pour cela, nous avons eu besoin de trois jeux de données, le premier est “Death, alcohol abuse (including alcoholic psychosis) de World Health Organisation European health Information Gateway, le deuxième regroupe des données sur les populations des pays étudiés world population prospects 2022 issu des données des nations unies et le dernier est World Administratives Boundaries pour les données sur les territoires nécessaires à la cartographie issu de Open datasoft
+
+Notre présentation va se construire en 3 parties. D’abord nous allons faire une présentation générale de l’application, des fonctionnalités qu’elle offre et de la manière de l’utiliser. Puis, nous allons expliquer le fonctionnement du code qui décrit cette application. Enfin, nous allons faire une démonstration de l’application avec un exemple type d’utilisation.
 
 I.  Présentation générale de l'application
 
@@ -32,47 +30,69 @@ IV. Conclusion
 
 ## I. Présentation générale de l'application
 
-Notre application permet à l'utilisateur d'obtenir les informations sur le nombre de décès par intoxication alcoolique pour un pays européen de son choix, ou bien de la totalité des pays de l'étude. Lorsque l'utilisateur ouvre l'application, il arrive sur le propos général avec quelques informations. L'objectif étant l'analyse d'un même jeu de données mais grâce à différents outils et ainsi de les analyser sous différents aspects et de se rendre très rapidement compte des subtilités dérrière un jeu brut de données. Le premiet onglet permet la lecture brute du jeu de donnée mais avec quelques options. On a un tableau qui affiche une colone pays, année, le nombre de mort chez les femmes, chez les hommes et les deux sexes confondus. On peut selectionner le pays ou même l'année de son choix. Aussi, en cliquant sur la case année, on peut avoir un ordre croissant ou décroissance en fonction de l'année ou alors du nombre de mort si on clique sur la case morts femme ou homme. Le deuxième onglet permet de visulaliser les données sur un graphique. Cela permet une analyse de l'évolution de la mortalité pour un pays, mais aussi de visualiser la différence entre les sexes. Par défaut, le graphique affiche le nombre de mort brut pour la totalité des pays, sexes confondus et par sexes. On peut aussi choisir d'afficher le nombre de mort par millions d'habitants. Si l'utilisateur veut comparer 2 pays, il en a la possibiliter en selectionnant un deuxième pays, il aura alors sur le graphique 2 courbes, représentant le nombre de morts par millions d'habitants afin d'avoir une comparaison plus juste qu'avec des données brutes. Le troisième onglet permet d'afficher une carte interactive de l'Europe. Elle permet de visualiser de façon très intuitives les différences entre les pays grâce à une nuance de couleur. L'utilisateur a le choix entre une analyse avec les données linéraires ou par quantiles, selon sa préférence d'étude. Par défaut, la carte illustre la moyenne de mort par année sur la durée d'étude, mais l'utilisateur peut sélectionner l'année de son choix et même faire défiler sur la carte l'évolution de la mortalité sur la période. Il peut choisir d'afficher uniquement un sexe ou les deux, faire apparaitre la légende et le nom des pays. Il peut aussi visualiser l'évolution de la mortalité en sélectionnant la case. En passant la souri sur un pays, on peut voir la moyenne de la mortalité par millions d'habitants, en fonction du sex, l'année du pic de mortalité ainsi que la période des données disponibles.
+Notre application permet à l’utilisateur d’obtenir les informations sur le nombre de décès par intoxication alcoolique pour un pays européen de son choix, ou bien de la totalité des pays de l’étude.
+
+Lorsque l’utilisateur ouvre l’application, il arrive sur le propos général avec quelques informations. L’objectif étant l’analyse d’un même jeu de données mais grâce à différents outils et ainsi de les analyser sous différents aspects et de se rendre très rapidement compte des subtilités derrière un jeu brut de données. 
+
+Le premier onglet permet la lecture brute du jeu de données mais avec quelques options. On a un tableau qui affiche une colonne pays, année, le nombre de morts chez les femmes, chez les hommes et les deux sexes confondus. On peut sélectionner le pays ou même l’année de son choix. Aussi, en cliquant sur la case année, on peut avoir un ordre croissant ou décroissance en fonction de l’année ou alors du nombre de mort si on clique sur la case morts femme ou homme.
+
+Le deuxième onglet permet de visualiser les données sur un graphique. Cela permet une analyse de l’évolution de la mortalité pour un pays, mais aussi de visualiser la différence entre les sexes. Par défaut, le graphique affiche le nombre de morts brut pour la totalité des pays, sexes confondus et par sexes. On peut aussi choisir d’afficher le nombre de morts par millions d’habitants. Si l’utilisateur veut comparer 2 pays, il en a la possibilité en sélectionnant un deuxième pays, il aura alors sur le graphique 2 courbes, représentant le nombre de morts par millions d’habitants afin d’avoir une comparaison plus juste qu’avec des données brutes.
+
+Le troisième onglet permet d’afficher une carte interactive de l’Europe. Elle permet de visualiser de façon très intuitives les différences entre les pays grâce à une nuance de couleur. L’utilisateur a le choix entre une analyse avec les données linéaires ou par quantiles, selon sa préférence d’étude. Par défaut, la carte illustre la moyenne de mort par année sur la durée d’étude, mais l’utilisateur peut sélectionner l’année de  son choix et même faire défiler sur la carte l’évolution de la mortalité sur la période. Il peut choisir d’afficher uniquement un sexe ou les deux, faire apparaitre la légende et le nom des pays.  Il peut aussi visualiser l’évolution de la mortalité en sélectionnant la case. En passant la souris sur un pays, on peut voir la moyenne de la mortalité par millions d’habitants, en fonction du sex, l’année du pic de mortalité ainsi que la période des données disponibles.
 
 ## II. Explication du code
 
-Les packages R que nous utilisons sont : `shiny` incluant `htmltools`, pour la construction de l'application web interactive `tidyverse` incluant `readr`, `dplyr`, `tidyr`, `ggplot2`, `tibble` et `stringr`, pour tout le traitement des données et leur visualisation `plotly` pour ajouter de l'interaction au graphique `sf` et `leaflet` pour le traitement des données géographiques et la carte interactive
+Voici les packages R que nous utilisons :
 
-Le code suit le schéma standard d'une application R Shiny avec plusieurs parties : Chargement et traitement des données Définition de fonctions qui seront appelées par la fonction `server` de shiny Définition de l'objet `ui` qui représente les éléments de l'interface de notre application Définition de la fonction `server` qui appelle les fonctions définies à l'étape 2 et lancement de l'application
+- `shiny` incluant `htmltools`, pour la construction de l’application web interactive (et `shinyjs`)
+- `tidyverse` incluant `readr`, `dplyr`, `tidyr`, `ggplot2`, `tibble` et `stringr`, pour tout le traitement des données et leur visualisation
+- `plotly` pour ajouter de l’interaction au graphique
+- `sf` et `leaflet` pour le traitement des données géographiques et la carte interactive
 
-Les fichier de données sont téléchargés avec une fonction appelée `download_rename_file()` qui permet de ne télécharger un fichier que s'il n'existe pas déjà dans le dossier `data`, le dézippe si nécessaire et renvoie le chemin vers ce fichier pour pouvoir le charger. Il garde aussi une trace de la date de téléchargement en l'ajoutant au nom de fichier.
+Le code suit le schéma assez standard d’une application R Shiny avec plusieurs parties :
 
-Nous utilisons les données de deux fichiers CSV (données de morts par "abus d'alcool" par année, sexe et pays ; données de population par pays, année et sexe) et un fichier Shapefile (données géographiques des frontières et noms des pays). Par chance, ce dernier comprend les noms anglais, français et codes à trois lettres des pays ce qui a rendu le téléchargement de deux autres CSV inutile.
+- Chargement et traitement des données
+- Définition de fonctions qui seront appelées par la fonction `server` de shiny
+- Définition de l’objet `ui` qui représente les éléments de l’interface de notre application
+- Définition de la fonction `server` qui appelle les fonctions définies à l’étape 2 et lancement de l’application
 
-Après avoir chargé ces trois datasets, nous construisons le "dataframe" (ici "tibble") `alcohol` qui contient les données de morts pour chaque année pour chaque pays en fonction du sexe, ainsi que les données en morts par million d'habitants grâce aux données de population. Puis nous construisons `alcohol_stats` qui contient des données pour chaque pays et sexe mais fait une moyenne des années disponibles pour le nombre de morts et le nombre de morts rapporté à la population.
+Les fichier de données sont téléchargés avec une fonction appelée `download_rename_file()` qui permet de ne télécharger un fichier que s’il n’existe pas déjà dans le dossier `data`, le dézippe si nécessaire et renvoie le chemin vers ce fichier pour pouvoir le charger. Il garde aussi une trace de la date de téléchargement en l’ajoutant au nom de fichier. 
 
-Les données géographiques sont mises en commun avec `alcohol` et `alcohol_stats` par des jointures nous donnant `alcohol_geo` et `alcohol_stats_geo` que l'on convertit en "objets sf" (Simple Feature).
+Nous utilisons les données de deux fichiers CSV (données de morts par “abus d’alcool” par année, sexe et pays ; données de population par pays, année et sexe) et un fichier Shapefile (données géographiques des frontières et noms des pays). Par chance, ce dernier comprend les noms anglais, français et codes à trois lettres des pays ce qui a rendu le téléchargement de deux autres CSV inutile.  
 
-Pour ce qui est de la visualisation de ces données, notre application se découpe en trois onglets : Tableau, Graphique et Carte. Cette interface est décrite dans l'objet `ui` que nous passerons à la fonction `shinyApp()`. Notre interface consiste en un layout avec une sidebar ainsi qu'un panneau principal. La sidebar est configurée pour afficher différents contrôles en fonction de l'onglet actif (grâce aux fonction `conditionalPanel()`), permettant de n'afficher pour chaque onglet que les outils nécessaires. En tout nous avons défini 11 inputs qui sont accessibles dans la fonction `server()`, qui a son tour rend accessible les outputs qui apparaissent dans l'interface, créant la boucle d'interactivité de Shiny.
+Après avoir chargé ces trois datasets, nous construisons le “dataframe” (ici “tibble”) `alcohol` qui contient les données de morts pour chaque année pour chaque pays en fonction du sexe, ainsi que les données en morts par million d’habitants grâce aux données de population. Puis nous construisons `alcohol_stats` qui contient des données pour chaque pays et sexe mais fait une moyenne des années disponibles pour le nombre de morts et le nombre de morts rapporté à la population.
 
-Dans `server()`, afin de définir chaque output pour chaque onglet, des fonctions (que l'on a préfixés par `draw_*`) sont définies. Elles acceptent des arguments provenant des inputs, font les transformations de données nécessaires en fonction de ces arguments, et renvoient un objet (`tibble`, objet `plotly`, widget `leaflet`) accepté par les fonctions `render*` (`renderDataTable()`, `renderPlotly()`, `renderLeaflet()`) créant les outputs.
+Les données géographiques sont mises en commun avec `alcohol` et `alcohol_stats` par des jointures nous donnant `alcohol_geo` et `alcohol_stats_geo` que l’on convertit en “objets sf” (*Simple Feature*). 
+
+Pour ce qui est de la visualisation de ces données, notre application se découpe en trois onglets : *Tableau*, *Graphique* et *Carte*. Cette interface est décrite dans l’objet `ui` que nous passerons à la fonction `shinyApp()`. Notre interface consiste en un *layout* avec une *sidebar* ainsi qu’un panneau principal. La *sidebar* est configurée pour afficher différents contrôles en fonction de l’onglet actif (grâce aux fonction `conditionalPanel()`), permettant de n’afficher pour chaque onglet que les outils nécessaires. En tout nous avons une dizaine d’*inputs* qui sont accessibles dans la fonction `server()`, qui a son tour rend accessible les *outputs* qui apparaissent dans l’interface, créant la boucle d’interactivité de Shiny.
+
+Dans `server()`, afin de définir chaque output pour chaque onglet, des fonctions (que l’on a préfixés par `draw_*`) sont définies. Elles acceptent des arguments provenant des *inputs*, font les transformations de données nécessaires en fonction de ces arguments, et renvoient un objet (`tibble`, objet `plotly`, widget `leaflet`) accepté par les fonctions `render*` (`renderDataTable()`, `renderPlotly()`, `renderLeaflet()`) créant les *outputs*.
 
 ## III. Exemple d'utilisation
 
-Nous pouvons vous faire la démonstration de notre application. Par exemple, nous pouvons nous intéresser au cas de la France. Dans les données brutes, nous pouvons sélectionner uniquement la France pour l'étudier directement. On peut visualiser le nombre de mort par année avec le nombre de mort chez les hommes et chez les femmes. En cliquant sur la colonne année on peut avoir le classement des années de la plus ancienne à la plus récente et inversement. Aussi, en cliqant sur la colonne morts femme on peut avoir un ordre croissant ou décroissant des années en fonction de la mortalité féminine. Ici, 1996 est l'année la moins meurtrière chez les femme (avec 436 morts) et 1981 est la plus meurtrière (avec 643 morts). De même chez les hommes, 1997 est la moins meurtrière (avec 1672 morts) et 1983 est la plus meurtrière (avec 2508 morts). On peut déjà avoir une idée de la différence de prévalence entre les sexes, les hommes étant plus touchés par l'intoxication alcoolique que les femmes. Mais l'étude sur graphique est plus facile pour cela. On peut aussi obtenir l'année la plus meurtrière, tous sexes confondus, 1997 étant la moins meurtrière (avec 2124 morts) et le pic de mortalité étant atteint en 1983 (avec 3128 morts). Ensuite, le graphique permet de visualiser l'évolution de la mortalité dans la durée mais aussi de comparer la différence de mortalité entre les hommes et les femmes. La courbe rouge représente la mortalité chez les femmes, la courbe verte celle des hommes et la courbe bleue la somme des deux. Sur le graphique, la différence de mortalité entre homme et femme est flagrante, la courbe des hommes est très proche de la courbe totale alors que la courbe des femmes étant très éloignée. En france, on s'aperçoit que la tendance générale est à la baisse malgré un rebond entre 1997 et 2003 avec une année creuse en 1997, la moins meurtrière, et un pic en 2003, qui n'a pas atteint le pic de 1983, puis une nouvelle baisse jusqu'à 2014. On peut aussi comparer la martalité en France avec un autre pays de la liste comme l'Allemagne. En nombre de mort par millions d'habitant on se rend compte qu'il est plus élevé en Allemagne qu'en France. Sur la cartographie, on peut avoir une étude comparative directement avec les pays européens grâce à la nuance de couleur, on visualise la moyenne de morts par millions d'habitants sur la durée. Là on se rend compte que la France se situe plutôt dans la moyenne des pays européens, un peu en dessous de l'Allemagne mais très au dessus de ses autres voisins comme l'Espagne ou l'Italie.
+Nous pouvons vous faire la démonstration de notre application. 
+
+Par exemple, nous pouvons nous intéresser au cas de la France. Dans les données brutes, nous pouvons sélectionner uniquement la France pour l’étudier directement. On peut visualiser le nombre de morts par année avec le nombre de morts chez les hommes et chez les femmes. En cliquant sur la colonne année on peut avoir le classement des années de la plus ancienne à la plus récente et inversement. Aussi, en cliqant sur la colonne morts femme on peut avoir un ordre croissant ou décroissant des années en fonction de la mortalité féminine. Ici, 1996 est l’année la moins meurtrière chez les femme (avec 436 morts) et 1981 est la plus meurtrière (avec 643 morts). De même chez les hommes, 1997 est la moins meurtrière (avec 1672 morts) et 1983 est la plus meurtrière (avec 2508 morts). On peut déjà avoir une idée de la différence de prévalence entre les sexes, les hommes étant plus touchés par l’intoxication alcoolique que les femmes. Mais l’étude sur graphique est plus facile pour cela. On peut aussi obtenir l’année la plus meurtrière, tous sexes confondus, 1997 étant la moins meurtrière (avec 2124 morts) et le pic de mortalité étant atteint en 1983 (avec 3128 morts).
+
+Ensuite, le graphique permet de visualiser l’évolution de la mortalité dans la durée mais aussi de comparer la différence de mortalité entre les hommes et les femmes. La courbe rouge représente la mortalité chez les femmes, la courbe verte celle des hommes et la courbe bleue la somme des deux. Sur le graphique, la différence de mortalité entre homme et femme est flagrante, la courbe des hommes est très proche de la courbe totale alors que la courbe des femmes étant très éloignée. 
+
+En France, on s’aperçoit que la tendance générale est à la baisse malgré un rebond entre 1997 et 2003 avec une année creuse en 1997, la moins meurtrière, et un pic en 2003, qui n’a pas atteint le pic de 1983, puis une nouvelle baisse jusqu’à 2014.
+On peut aussi comparer la mortalité en France avec un autre pays de la liste comme l’Allemagne. En nombre de morts par millions d’habitant on se rend compte qu’il est plus élevé en Allemagne qu’en France. 
+
+Sur la cartographie, on peut avoir une étude comparative directement avec les pays européens grâce à la nuance de couleur, on visualise la moyenne de morts par millions d’habitants sur la durée. Là on se rend compte que la France se situe plutôt dans la moyenne des pays européens, un peu en dessous de l’Allemagne mais très au-dessus de ses autres voisins comme l’Espagne ou l’Italie.
 
 ## IV. Conclusion
 
-Pour conclure, nous avons mis en place cette application afin de permettre à un utilisateur de lire, comparer et analyser un jeu de données, originalement brut. L'outil R shiny nous a permis de mettre en place cette interface d'utilisateur ainsi que d'extraire les données, de les réorganiser afin de rendre possible une mise à disposition des données en fonction de la visualisation, qu'elle soit graphique, cartographique, ordonnée ou catégorisée.\
-Merci de nous avoir écouté.
+Pour conclure, nous avons mis en place cette application afin de permettre à un utilisateur de lire, comparer et analyser un jeu de données, originalement brut. L’outil R shiny nous a permis de mettre en place cette interface d’utilisateur ainsi que d’extraire les données, de les réorganiser afin de rendre possible une mise à disposition des données en fonction de la visualisation, qu’elle soit graphique, cartographique, ordonnée ou catégorisée.  
 
-datasets : Données morts : <https://gateway.euro.who.int/en/indicators/hfamdb_87-deaths-alcohol-abuse-including-alcoholic-psychosis/>
+## Sources
 
-données consomation : <https://data.worldbank.org/indicator/SH.ALC.PCAP.LI?most_recent_value_desc=true>
+- [*Alcohol abuse (including alcoholic psychosis), number of deaths, by sex*](https://gateway.euro.who.int/en/indicators/hfamdb_87-deaths-alcohol-abuse-including-alcoholic-psychosis/)  \
+© WHO Regional Office for Europe 2022. All rights reserved.
 
-Moyenne par sex, par année par sex, sur la période par pays
+ 
+- [*World Administrative Boundaries - Countries and Territories*](https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/information/)  \
+World Food Programme (UN agency) via opendatasoft
 
-Le max par sex, année, pays
-
-Un graphique qui indique une courbe par sex sur la période avec une courbe par pays sur la periode sex confondus
-
-cartographie : carte de l'europe mortalité sex confondus puis seulement homme puis seulement femme
-
-interface : -on demande de choisir une année et en réponse il lui donne le pays qui a la plus grande consommation
-
--on demande de choisir un pays et en rep il donne sa conso moyenne, année max, année min et un graph avec l'évolution de la conso / mortalité
+- [*World Population Prospects 2022 - Total Population on 01 July*](https://population.un.org/wpp/Download/Standard/CSV/)  \
+UN Department of Economic and Social Affairs - Population Division

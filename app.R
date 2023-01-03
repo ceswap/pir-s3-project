@@ -7,18 +7,6 @@
 #                                      voir README.md #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-# TODO setwd() !!!!
-# TODO README quelle version R ??? etc...
-# TODO UNZIP READ DELETE UNZIPPED everytime!
-
-# TODO Ajouter /million et toggle stats dans datatable
-# TODO Ajouter /million dans graph
-# TODO Légende carte ajouter par million d'habitants quand relevant
-# TODO Désactiver slider annees si case cochée
-# TODO Quantile ? explain ?
-
-
-
 # PACKAGES & WORKING DIR ----
 
 # Pour se placer dans le dossier de ce fichier
@@ -29,7 +17,7 @@ if (Sys.getenv("RSTUDIO") == "1") {
 }
 
 # Installation (si besoin) et chargement
-packages <- c("tidyverse", "shiny", "plotly", "leaflet", "sf")
+packages <- c("tidyverse", "shiny", "shinyjs",  "plotly", "leaflet", "sf")
 
 installed_packages <- packages %in% rownames(installed.packages())
 
@@ -40,7 +28,7 @@ if (any(installed_packages == FALSE)) {
 invisible(lapply(packages, library, character.only = TRUE))
 remove(packages, installed_packages)
 
-# DATA SETUP ----
+# DATA SETUP ====
 
 # Fonction pour gérer le téléchargement des fichiers si ils ne sont pas déjà présents
 download_rename_file <- function(url, filename, dir = ".") {
@@ -209,20 +197,43 @@ remove(population, alcohol_csv_path, geo_world, pop_unzipped_filepath,
 
 # FIN DE SETUP
 
-# FONCTIONS DRAW POUR SHINY SERVER ----
+# FONCTIONS DRAW POUR SHINY SERVER ====
 
-  # FONCTION A PROPOS ---- 
+  # FONCTION POUR 'A PROPOS' ---- 
 draw_info_HTML <- function() {
-  return(
+  about_html <- tags$div(
     tags$div(
       tags$h3("À propos"),
-      tags$p("Données provenant du data set",
-             tags$em("Alcohol abuse (including alcoholic psychosis), number of deaths, by sex"),
-             "disponible sur le European Health Information Gateway de l'OMS."))
+        tags$p("Données provenant du data set",
+               tags$em("Alcohol abuse (including alcoholic psychosis), number of deaths, by sex"),
+               "disponible sur le European Health Information Gateway de l'OMS.", tags$br(),
+               "Inclus le nombre de morts par \"abus d'alcool\" par pays d'Europe et par année de 1979 à 2020. Pas de données pour la Russie et Andorre.")
+      ),
+      tags$div(
+        tags$hr(), # Ligne horizontale
+        tags$footer( # Elément footer avec les sources et liens
+          tags$a(tags$div(tags$img(src = "https://upload.wikimedia.org/wikipedia/commons/9/91/Octicons-mark-github.svg", 
+                                   class = "github-img"), 
+                          tags$span("Dépôt Github")), href="https://github.com/ceswap/pir-s3-project"),
+          tags$h6("Sources"),
+          tags$ul(class = "sources-list",
+                  tags$li("WHO - European Health Information Gateway", tags$br(),
+                          tags$a("Alcohol abuse (including alcoholic psychosis), number of deaths, by sex",
+                                 href="https://gateway.euro.who.int/en/indicators/hfamdb_87-deaths-alcohol-abuse-including-alcoholic-psychosis/")),
+                  tags$li("World Food Programme (UN agency) via opendatasoft", tags$br(),
+                          tags$a("World Administrative Boundaries - Countries and Territories", 
+                                 href = "https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/information/")),
+                  tags$li("UN Department of Economic and Social Affairs - Population Division", tags$br(),
+                          tags$a("World Population Prospects 2022 - Total Population on 01 July.", 
+                                 href = "https://population.un.org/wpp/Download/Standard/CSV/")))
+        )
+      )
     )
+    
+    return (about_html)
 }
 
-  # FONCTION DATATABLE ---- 
+  # FONCTION POUR 'TABLEAU' ---- 
 draw_table <- function(stats = FALSE, per_million = FALSE) {
   if (stats) {
     
@@ -273,21 +284,21 @@ draw_table <- function(stats = FALSE, per_million = FALSE) {
   return(alcohol_for_table)
 }
 
-  # FONCTION TOOLTIP POUR PLOT ----
-custom_tooltip <- function(series, year, deaths) {
+  # (FONCTION TOOLTIP POUR 'GRAPHIQUE') ----
+tooltip <- function(series, year, deaths, per_million = FALSE) {
   return(paste0(series,
                 "\n  Année : ", year,
                 "\n  Morts : ", format(deaths, big.mark=" ")))
 }
 
-  # FONCTION PLOT ----
-draw_plotly <- function(selected_country_code = "ALL", selected_country_code_2 = "NONE") {
+  # FONCTION POUR 'GRAPHIQUE' (GGPLOTLY) ----
+draw_plotly <- function(selected_country_code = "ALL", selected_country_code_2 = "NONE", per_million = FALSE) {
   if (selected_country_code == "ALL" | !(selected_country_code %in% alcohol$country_code)) {
     alcohol_for_plot <- alcohol %>% 
       group_by(year) %>% 
-      summarise(across(starts_with("deaths_"), .fns =  sum, na.rm=T)) %>% 
+      summarise(across(starts_with("deaths_"), .fns =  sum, na.rm = T)) %>% 
       mutate(country_code = "ALL",
-             country_name_fr = "Total somme") %>% 
+             country_name_fr = "Somme totale") %>% 
       bind_rows(filter(alcohol, country_code == selected_country_code_2))
   } else {
     alcohol_for_plot <- alcohol %>%
@@ -295,10 +306,11 @@ draw_plotly <- function(selected_country_code = "ALL", selected_country_code_2 =
       group_by(year)
   }
 
+  y_title <- paste("Morts par intoxications alcoolique par année", if_else(per_million, "par million", ""))
+  
   plotly_title <- paste0(
-    "Morts par intoxication alcoolique <br>par année (",
-       if_else(selected_country_code == "ALL", 
-               "somme totale", 
+    "Morts par intoxication alcoolique <br>par année ", if_else(per_million, "par million ", ""), "(",
+       if_else(selected_country_code == "ALL", "somme totale", 
                country_list$country_name_fr[which(country_list$country_code == selected_country_code)]),
        if_else(selected_country_code_2 == "NONE", "",
                paste0(" et ", country_list$country_name_fr[which(country_list$country_code == selected_country_code_2)])),
@@ -306,22 +318,31 @@ draw_plotly <- function(selected_country_code = "ALL", selected_country_code_2 =
     )
   
   if (selected_country_code_2 != "NONE") {
+    deaths <- if_else(per_million, "deaths_all_million", "deaths_all")
     plot <- alcohol_for_plot %>%
-      ggplot(aes(x = year, y = deaths_all, colour = country_name_fr, group = 1)) +
-      geom_line(aes(text = custom_tooltip(country_name_fr, year, deaths_all)), size = 1.2) +
-      labs(title = "Morts par intoxications \nalcoolique par année",
-           x = "Année", y = "Morts par intoxications alcoolique par année") +
+      ggplot(aes(x = year, y = .data[[deaths]], color = country_name_fr, group = 1)) +
+      geom_line(aes(text = tooltip(country_name_fr, year, .data[[deaths]], per_million)), size = 1.2) +
+      labs(x = "Année", y = y_title, title = "\n\n") +
       scale_colour_discrete(name = "") +
       theme_minimal()
     
   } else {
+    deaths_all    <- if_else(per_million, "deaths_all_million", "deaths_all")
+    deaths_female <- if_else(per_million, "deaths_female_million", "deaths_female")
+    deaths_male   <- if_else(per_million, "deaths_male_million", "deaths_male")
+    
     plot <- alcohol_for_plot %>%
       ggplot(aes(x = year, group = 1)) +
-        geom_line(aes(y = deaths_all,    colour = "Total",  text = custom_tooltip("Total",  year, deaths_all)),    size = 1.2) +
-        geom_line(aes(y = deaths_female, colour = "Femmes", text = custom_tooltip("Femmes", year, deaths_female)), size = 1.2) +
-        geom_line(aes(y = deaths_male,   colour = "Hommes", text = custom_tooltip("Hommes", year, deaths_male)),   size = 1.2) +
-        labs(title = "Morts par intoxications \nalcoolique par année",
-             x = "Année", y = "Morts par intoxications alcoolique par année") +
+        geom_line(aes(y = .data[[deaths_all]],
+                      color = "Total",
+                      text = tooltip("Total",  year, .data[[deaths_all]], per_million)), size = 1.2) +
+        geom_line(aes(y = .data[[deaths_female]],
+                      color = "Femmes", 
+                      text = tooltip("Femmes", year, .data[[deaths_female]], per_million)), size= 1.2) +
+        geom_line(aes(y = .data[[deaths_male]],   
+                      color = "Hommes", 
+                      text = tooltip("Hommes", year, .data[[deaths_male]], per_million)), size = 1.2) +
+        labs(x = "Année", y = y_title, title = "\n\n") +
         scale_colour_discrete(name = "") +
         theme_minimal()
   }
@@ -329,7 +350,7 @@ draw_plotly <- function(selected_country_code = "ALL", selected_country_code_2 =
   return(ggplotly(plot, tooltip = c("text")) %>% layout(title = list(text = plotly_title)))
 }
 
-  # FONCTION STATS TOOLTIP POUR LEAFLET ----
+  # (FONCTION STATS TOOLTIP POUR LEAFLET) ----
 stats_output <- function(selected_country_code, per_million = TRUE) {
   stats <- alcohol_stats %>% filter(country_code == selected_country_code)
   
@@ -348,7 +369,7 @@ stats_output <- function(selected_country_code, per_million = TRUE) {
     ))
 }
 
-  # FONCTION CARTE LEAFLET ----
+  # FONCTION POUR 'CARTE' (LEAFLET) ----
 draw_leaflet <- function(avg = TRUE, sex_column = "all", selected_year = NULL, 
                          selected_palette = "quantile",  country_labels = FALSE,
                          legend = FALSE, per_million = TRUE) {
@@ -392,7 +413,7 @@ draw_leaflet <- function(avg = TRUE, sex_column = "all", selected_year = NULL,
                 stroke = FALSE, smoothFactor = 0.3, fillOpacity = 1) %>%
     {if (legend) addLegend(., "topright", pal = palette, values = ~alcohol_for_leaflet[[sex_column]],
               title = if_else(selected_palette == "quantile", "Percentiles", "Echelle linéaire"),
-              labFormat = labelFormat(suffix = if_else(selected_palette == "quantile", "", " morts/an")),
+              labFormat = labelFormat(suffix = if_else(selected_palette == "quantile", "", if_else(per_million, " morts/an/10^6", " morts/an"))),
               opacity = 0.75) else .} %>%
     setView(lng = 18, lat = 55, zoom = 3) %>%
     {if(country_labels) addLabelOnlyMarkers(., label = alcohol_for_leaflet$country_name_fr,
@@ -404,22 +425,30 @@ draw_leaflet <- function(avg = TRUE, sex_column = "all", selected_year = NULL,
 }
 
 
-# SHINY UI ----
+# SHINY UI ====
 ui <- fluidPage(
   theme = bslib::bs_theme(bootswatch = "darkly"),
-  # CSS ----
+  # CSS STYLES ----
   tags$head(
     tags$style(HTML("
         .tab-pane.active { margin-top: 15px; }
-        footer { font-size: 0.8rem; }
+        footer { font-size: 0.85rem; }
+        .well { margin-bottom: 20px; }
         .sources-list {
           list-style: none;
           margin-top: 10px;
           padding-left: 10px;
         }
         .sources-list > li { margin-bottom: 10px; }
+        .github-img {
+          max-width: 15px; 
+          margin-right: 10px;
+          filter: brightness(5);
+          -webkit-filter: brightness(5); 
+        }
         .table { --bs-table-striped-bg: #282828; }
-        #DataTables_Table_0 > tfoot { display: none; }
+        #DataTables_Table_0 tfoot { display: none; }
+        #DataTables_Table_0_filter > label { transform: translateX(-60px);}
         .paginate_button { margin: 3px; }
         .leaflet-label {
           white-space: pre;
@@ -452,22 +481,24 @@ ui <- fluidPage(
   ),
 
   
-  titlePanel("Alcool"), # Titre de l'application TODO
+  titlePanel("Alcohol Abuse"), # Titre de l'application
   
-  # Sous-titre de l'application TODO
-  fluidRow(tags$p(paste("Morts par intoxication à l'alcool par année en Europe de", min(alcohol$year), "à", max(alcohol$year)))),
+  # Sous-titre de l'application
+  fluidRow(tags$p(paste("Morts par \"abus d'alcool\" par année en Europe de", min(alcohol$year), "à", max(alcohol$year)))),
   
-  # LAYOUT PRINCIPAL avec sidebar ----
+  # UI LAYOUT PRINCIPAL avec sidebar ----
   sidebarLayout(
     
-    # SIDEBAR ---- 
+    # UI SIDEBAR ---- 
     sidebarPanel(width = 4,
       
       # Plusieurs conditionalPanel() pour modifier le contenu de la sidebar en fonction du tabset sélectionné
-      # SIDEBAR POUR A PROPOS
-      conditionalPanel(condition = "input.selected_tab == 'info_tab'", NULL), 
+      # SIDEBAR POUR 'A PROPOS'
+      conditionalPanel(condition = "input.selected_tab == 'info_tab'",
+                       "Vous pouvez sélectionner un onlget pour accéder aux visualisations des données."), 
+                        
       
-      # SIDEBAR POUR DATATABLE
+      # SIDEBAR POUR 'TABLEAU'
       conditionalPanel(condition = "input.selected_tab == 'table'",
                        checkboxInput(inputId = "table_stats_select",
                                      label   = "Moyennes sur toutes les années",
@@ -476,8 +507,11 @@ ui <- fluidPage(
                                      label   = "Données par million d'habitants",
                                      value   = FALSE)),    
       
-      # SIDEBAR POUR PLOT
-      conditionalPanel(condition = "input.selected_tab == 'plot'",            
+      # SIDEBAR POUR 'GRAPHIQUE'
+      conditionalPanel(condition = "input.selected_tab == 'plot'",
+                       checkboxInput(inputId = "plot_per_million_select",
+                                     label = "Données par million d'habitants",
+                                     value = FALSE),
                        selectInput(inputId = "country_select", # Choix pays 1
                                    label   = "Pays",
                                    choices = setNames(country_list$country_code, nm = country_list$country_name_fr)),
@@ -485,7 +519,7 @@ ui <- fluidPage(
                                    label   = "Comparer",
                                    choices = setNames(c("NONE", country_list$country_code[2:length(country_list$country_code)]), 
                                                       nm = c("-", country_list$country_name_fr[2:length(country_list$country_code)])))),
-      # SIDEBAR POUR CARTE
+      # SIDEBAR POUR 'CARTE'
       conditionalPanel(condition = "input.selected_tab == 'map'",             
                        checkboxInput(inputId = "avg_select",
                                      label = "Moyenne sur toutes les années disponibles",
@@ -494,7 +528,7 @@ ui <- fluidPage(
                               class = "year-select-text"),
                        sliderInput(inputId = "year_select",
                                    label   = "Année",
-                                   min     = min(alcohol$year), # TODODODOO
+                                   min     = min(alcohol$year),
                                    max     = max(alcohol$year),
                                    value   = max(alcohol$year),
                                    animate = animationOptions(interval = 500), # Pour le bouton 'play'
@@ -514,33 +548,18 @@ ui <- fluidPage(
                                        value = FALSE),
                          checkboxInput(inputId = "country_labels_select",
                                        label = "Afficher noms des pays",
-                                       value = FALSE))
-                       ),
-      
-    tags$hr(), # Ligne horizontale
-    tags$footer( # Elément footer avec les sources et liens
-      tags$a(tags$div(tags$img(src = "https://upload.wikimedia.org/wikipedia/commons/9/91/Octicons-mark-github.svg", 
-                               style = "max-width: 15px; margin-right: 10px;"), 
-            tags$span("GitHub")), href="https://github.com/ceswap/pir-s3-project"),
-      tags$h6("Sources"),
-      tags$ul(class = "sources-list",
-        tags$li(tags$a("WHO - European Health Information Gateway",
-                       href="https://gateway.euro.who.int/en/indicators/hfamdb_87-deaths-alcohol-abuse-including-alcoholic-psychosis/")),
-        tags$li(tags$a("World Administrative Boundaries, World Food Programme (UN agency)", 
-                       href = "https://public.opendatasoft.com/explore/dataset/world-administrative-boundaries/information/")),
-        tags$li(tags$a("UN, Department of Economic and Social Affairs, Population Division. World Population Prospects 2022", 
-                       href = "https://population.un.org/wpp/Download/Standard/CSV/"))
-        )
-      )
+                                       value = FALSE),
+                         useShinyjs())
+                       )
     ),
 
-    # PANNEAU PRINCIPAL ----
+    # UI PANNEAU PRINCIPAL avec tabs (onglets) ----
     mainPanel(
       tabsetPanel( # Onglets
-        tabPanel("À propos",       htmlOutput("info_tab"),   value="info_tab"), # APROPOS
-        tabPanel("Données brutes", dataTableOutput("table"), value="table"),    # DATATABLE
-        tabPanel("Graphique",      plotlyOutput("plot"),     value="plot"),     # PLOT
-        tabPanel("Carte",          htmlOutput("leaflet_title"), leafletOutput("leaflet"), value="map"), # MAP
+        tabPanel("À propos",  htmlOutput("info_tab"),   value="info_tab"), # APROPOS
+        tabPanel("Tableau",   dataTableOutput("table"), value="table"),    # DATATABLE
+        tabPanel("Graphique", plotlyOutput("plot"),     value="plot"),     # PLOT
+        tabPanel("Carte",     htmlOutput("leaflet_title"), leafletOutput("leaflet"), value="map"), # MAP
         id = "selected_tab" # `id` et les `value` des tabPanel() sont nécessaires aux conditionalPanel() de la sidebar
         )
       )
@@ -550,18 +569,19 @@ ui <- fluidPage(
 # SHINY SERVER ----
 server <- function(input, output) {
 
-  # OUTPUT A PROPOS
+  # OUTPUT POUR 'A PROPOS'
   output$info_tab <- renderUI(draw_info_HTML())
   
-  # OUTPUT DATATABLE
+  # OUTPUT POUR 'TABLEAU'
   output$table <- renderDataTable(draw_table(stats = input$table_stats_select, per_million = input$table_per_million_select),
                                   options = list("pageLength" = 10, 
                                                  "lengthMenu" = list(c(10, 25, 50, -1), c('10', '25', '50', 'Tout'))))
   
-  # OUTPUT PLOT
+  # OUTPUT POUR 'GRAPHIQUE'
   output$plot <- renderPlotly(draw_plotly(selected_country_code   = input$country_select, 
-                                          selected_country_code_2 = input$country_select_2))
-  # OUTPUT MAP
+                                          selected_country_code_2 = input$country_select_2,
+                                          per_million = input$plot_per_million_select))
+  # OUTPUT POUR 'CARTE'
   output$leaflet <- renderLeaflet(draw_leaflet(avg = input$avg_select, 
                                                sex_column = input$sex_select, 
                                                selected_year = input$year_select,
@@ -570,17 +590,26 @@ server <- function(input, output) {
                                                legend = input$legend_select,
                                                per_million = input$per_million))
   
-  # Output pour le titre en plus dans onglet Carte
+  # Désactiver le slider 'années' si 'Moyenne sur toutes les années' est coché
+  observeEvent(input$avg_select, {
+    if (input$avg_select) {
+      shinyjs::disable("year_select")
+    } else {
+      shinyjs::enable("year_select")
+    }
+  })
+  
+  # Output pour le titre en plus dans onglet 'Carte'
   output$leaflet_title <- renderUI(tags$h4(if_else(input$avg_select, 
                                                    "Moyenne par pays", 
                                                    paste0("Données pour l'année ", input$year_select))))
 }
 
-# RUN IT
+# RUN IT ! ====
+# Condition if qui vérifie si RStudio est ouvert ou pas, si on lance l'appli depuis le script `run.sh` par exemple...
 if (Sys.getenv("RSTUDIO") == "1") {
   shinyApp(ui, server) 
+  # runGadget(ui, server, viewer = dialogViewer(dialogName = "Projet PIR", width = 1280, height = 800))
 } else {
   runGadget(ui, server, viewer = browserViewer(browser = getOption("browser")))
 }
-
-# runGadget(ui, server, viewer = dialogViewer(dialogName = "Projet PIR", width = 1280, height = 800))
